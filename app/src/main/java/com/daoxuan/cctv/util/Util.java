@@ -1,24 +1,17 @@
 package com.daoxuan.cctv.util;
 
-import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.PackageInfo;
-import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import android.widget.Toast;
-
-import androidx.core.content.FileProvider;
-
 import android.webkit.ValueCallback;
 import android.webkit.WebView;
+import android.widget.Toast;
 
-import java.io.File;
 import java.text.MessageFormat;
 import java.util.Date;
 
@@ -33,7 +26,6 @@ public class Util {
         mainHandler.post(new Runnable() {
             @Override
             public void run() {
-                // 在这里调用你的View方法
                 LogUtil.i(TAG,"evalOnUi "+javascript);
                 eval(webView,javascript,null);
             }
@@ -102,7 +94,7 @@ public class Util {
         try {
             PackageInfo packageInfo = context.getPackageManager().getPackageInfo("com.google.android.webview", 0);
             if (packageInfo != null) {
-                versionName = packageInfo.versionName; // 获取版本名称
+                versionName = packageInfo.versionName; 
                 Log.d(TAG, "versionName = "+versionName);
             }
         } catch (Exception e) {
@@ -111,52 +103,12 @@ public class Util {
         return versionName;
     }
 
-    public static void installApk(Context context, File apkFile) {
-        try {
-            if (context == null || apkFile == null || !apkFile.exists()) {
-                LogUtil.e(TAG, "Invalid context or APK file");
-                return;
-            }
-
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                Uri contentUri = FileProvider.getUriForFile(context,
-                        BuildConfig.APPLICATION_ID + ".fileProvider", apkFile);
-                intent.setDataAndType(contentUri, "application/vnd.android.package-archive");
-            } else {
-                intent.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive");
-            }
-            
-            // Ensure we're using activity context
-            Context activityContext = context;
-            if (!(context instanceof Activity)) {
-                if (context.getApplicationContext() != null) {
-                    activityContext = context.getApplicationContext();
-                }
-            }
-            
-            activityContext.startActivity(intent);
-        } catch (Exception e) {
-            LogUtil.e(TAG, "Error installing APK: " + e.getMessage());
-           // e.printStackTrace();
-            ToastUtils.show(context, "安装APK时出错，请重试", Toast.LENGTH_LONG);
-        }
-    }
-
     public  static  boolean isNotNeedX5(){
-        //Build.VERSION_CODES.R 安卓11
-        //Build.VERSION_CODES.P 安卓9
-        //Build.VERSION_CODES.N 安卓7
         if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.N){
             return true;
         }
         return false;
     }
-    // 获取本地网络IP地址（优先IPv4）
     public static String getLocalIPAddress(Context context) {
         String ip = getIPv4FromInterfaces();
         if (ip != null && !ip.isEmpty()) return ip;
@@ -269,37 +221,29 @@ public class Util {
                 (ip >> 24 & 0xFF);
     }
 
-    // 添加获取IPv6地址的方法
     public static String getLocalIPv6Address() {
         try {
-            // 遍历所有网络接口
             java.util.Enumeration<java.net.NetworkInterface> networkInterfaces = java.net.NetworkInterface.getNetworkInterfaces();
             while (networkInterfaces.hasMoreElements()) {
                 java.net.NetworkInterface networkInterface = networkInterfaces.nextElement();
                 
-                // 排除回环接口、虚拟接口等
                 if (!networkInterface.isUp() || networkInterface.isLoopback() || networkInterface.isVirtual()) {
                     continue;
                 }
                 
-                // 遍历接口的所有IP地址
                 java.util.Enumeration<java.net.InetAddress> addresses = networkInterface.getInetAddresses();
                 while (addresses.hasMoreElements()) {
                     java.net.InetAddress address = addresses.nextElement();
                     
-                    // 检查是否是IPv6地址且不是回环地址
                     if (!address.isLoopbackAddress() && address instanceof java.net.Inet6Address) {
                         String ipv6 = address.getHostAddress();
                         
-                        // 处理本地链接地址，移除%后面的内容
                         int delimIndex = ipv6.indexOf('%');
                         if (delimIndex >= 0) {
                             ipv6 = ipv6.substring(0, delimIndex);
                         }
                         
-                        // 不使用临时地址和Privacy扩展生成的地址
                         if (!ipv6.startsWith("fe80") && !ipv6.startsWith("fd")) {
-                            LogUtil.i(TAG, "找到IPv6地址: " + ipv6);
                             return ipv6;
                         }
                     }
@@ -309,7 +253,6 @@ public class Util {
             LogUtil.e(TAG, "获取IPv6地址失败: " + e.getMessage());
         }
         
-        // 如果没有找到公网IPv6地址，返回本地链接地址（如果有）
         try {
             java.util.Enumeration<java.net.NetworkInterface> networkInterfaces = java.net.NetworkInterface.getNetworkInterfaces();
             while (networkInterfaces.hasMoreElements()) {
@@ -327,7 +270,6 @@ public class Util {
                         if (delimIndex >= 0) {
                             ipv6 = ipv6.substring(0, delimIndex);
                         }
-                        LogUtil.i(TAG, "使用本地链接IPv6地址: " + ipv6);
                         return ipv6;
                     }
                 }
@@ -336,6 +278,6 @@ public class Util {
             LogUtil.e(TAG, "获取本地链接IPv6地址失败: " + e.getMessage());
         }
         
-        return "::1"; // 如果没有找到任何IPv6地址，返回回环地址
+        return "::1"; 
     }
 }

@@ -32,22 +32,18 @@ public class DouyinActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        requestWindowFeature(Window.FEATURE_NO_TITLE);//隐藏标题栏
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
-        // 强制横屏
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         setContentView(R.layout.activity_douyin);
         bind();
         thisContext=this;
-        //更新数据
         initWebView();
         lWebView.requestFocus();
         binding.webviewWrapper.requestFocus();
-        //数据库获取最新数据
         lWebView.loadUrl("https://www.douyin.com/?recommend=1");
         ToastUtils.show(this,"已支持遥控器上下可快速切台",Toast.LENGTH_SHORT);
-        // 或者如果使用旧的 ActionBar
         if (getActionBar() != null) {
             getActionBar().hide();
         }
@@ -70,41 +66,34 @@ public class DouyinActivity extends Activity {
         webSetting.setDatabaseEnabled(true);
         webSetting.setDomStorageEnabled(true);
         //webSetting.setNeedInitialFocus(false);
-        // 禁用缩放
         webSetting.setSupportZoom(false);
         webSetting.setBuiltInZoomControls(false);
         webSetting.setDisplayZoomControls(false);
-        //自适应屏幕
         webSetting.setUseWideViewPort(true);
         //webSetting.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.SINGLE_COLUMN);
         webSetting.setLoadWithOverviewMode(true);
         webSetting.setMixedContentMode(WebSettings.LOAD_NORMAL);
         //app cache
         //webSetting.setAppCacheEnabled(true);
-        //自动播放
         webSetting.setMediaPlaybackRequiresUserGesture(false);
         String userAgent=webSetting.getUserAgentString();
         //"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
         webSetting.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
-        //webSetting.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36");
+        //webSetting.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36");
         //normal?
         webSetting.setCacheMode(WebSettings.LOAD_DEFAULT);
         webSetting.setJavaScriptCanOpenWindowsAutomatically(false);
         webSetting.setGeolocationEnabled(false);
-        //无图
         webSetting.setBlockNetworkImage(true);
         lWebView.setWebViewClient(new WebViewClientImpl(getBaseContext(),lWebView,2));
         initWebChromeClient();
-        //禁止上下左右滚动(不显示滚动条)
         lWebView.setScrollContainer(false);
         lWebView.setVerticalScrollBarEnabled(false);
         lWebView.setHorizontalScrollBarEnabled(false);
 
-        //远程调试
         WebView.setWebContentsDebuggingEnabled(true);
         // mWebView.setFocusable(false);
         //mWebView.setFocusableInTouchMode(false);
-        //硬件加速 android 4.X 有问题
         //mWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         //mWebView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         //lWebView.addJavascriptInterface(new LiveActivity.JsInterface(),"_api");

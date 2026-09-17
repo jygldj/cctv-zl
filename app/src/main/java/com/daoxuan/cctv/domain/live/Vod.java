@@ -12,7 +12,6 @@ public class Vod {
    private Integer detailIndex;
    private String key;
    
-   // 添加收藏状态字段
    private boolean isFavorite = false;
 
     public String getName() {
@@ -55,7 +54,6 @@ public class Vod {
         this.key = key;
     }
     
-    // 收藏状态的getter和setter
     public boolean isFavorite() {
         return isFavorite;
     }

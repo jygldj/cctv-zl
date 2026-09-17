@@ -113,20 +113,9 @@ public class LiveActivity extends BaseActivity {
      */
     private static final long SWITCH_DEBOUNCE_MS = 250L;
 
-    /**
-     * [v4.5.29] 频道名浮层（binding.liveName）的「进度停滞」兜底时长。
-     *
-     * 原逻辑只有一条清空路径：onProgressChanged 收到 newProgress==100 时，延迟 1 秒
-     * 发一条 message(2) 把 liveName 清空。而第三方直播页（yangshipin / 央视频）常驻
-     * HLS 分片与心跳长连接，WebView 的进度会长期停在 60~90%，站内 SPA 切台后甚至
-     * 回落后永不再到 100 —— 于是「频道名 70%」这类文字会永久压在画面上，
-     * 表现为「播不动 / 卡死」（实测三张截图分别是 70% / 70% / 10%，无一到 100）。
-     *
-     * 现在改为：每次收到进度就把清空任务顺延这么久。进度一旦停滞或走完，浮层自动收起；
-     * 只要进度还在推进，浮层就继续显示，不影响正常的加载提示。
-     */
+    /* [回补 v4.5.29] 进度停滞兜底：进度一直停在某个百分比（没走到 100）超过这个时长，
+       就收起频道名浮层，避免「频道名 X%」永久压在画面上。 */
     private static final long STALE_NAME_CLEAR_MS = 4000L;
-
     private long lastTime = 0;
     protected void initWebViewClient() {
         mWebView.setWebViewClient(new WebViewClientImpl(getBaseContext(),mWebView,1));
@@ -154,8 +143,8 @@ public class LiveActivity extends BaseActivity {
                     binding.liveName.setText("");
                     break;
                 case 3:
-                    /* [v4.5.29] 进度停滞兜底：进度停滞 STALE_NAME_CLEAR_MS 仍未走到 100，
-                       收起频道名浮层，避免「频道名 X%」永久压在画面上。 */
+                    /* [回补 v4.5.29] 进度停滞兜底：STALE_NAME_CLEAR_MS 内没走到 100 就收起频道名，
+                       避免「频道名 X%」永久压在画面上。 */
                     if (binding != null && binding.liveName != null) {
                         binding.liveName.setText("");
                     }
@@ -479,16 +468,15 @@ public class LiveActivity extends BaseActivity {
                 if(null!=vod){
                     currentLive=vod;
                     binding.liveName.setText(currentLive.getName()+" "+newProgress+"%");
+                    /* [回补 v4.5.29] 每次进度回调都顺延一次自清任务：
+                       进度还在动就不断推迟，真卡住了才会在 STALE_NAME_CLEAR_MS 后触发。 */
+                    handler.removeMessages(3);
+                    handler.sendMessageDelayed(handler.obtainMessage(3), STALE_NAME_CLEAR_MS);
                 }
                 if(newProgress==100){
                     HistoryDaoX.updateChannel(thisContext,url);
                     handler.sendMessageDelayed (handler.obtainMessage(2, "noText"),1000);
                 }
-                /* [v4.5.29] 进度停滞兜底（见 STALE_NAME_CLEAR_MS 注释）：
-                   每次收到进度就顺延一次清空任务，进度停滞即自动收起浮层。
-                   remove 后重发即可实现「顺延」，无需额外时间戳。 */
-                handler.removeMessages(3);
-                handler.sendMessageDelayed(handler.obtainMessage(3), STALE_NAME_CLEAR_MS);
                 LogUtil.i("WebChromeClient", "onProgressChanged, newProgress:" + newProgress + ", view:" + view);
             }
             @Override

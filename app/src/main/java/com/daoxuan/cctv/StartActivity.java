@@ -16,7 +16,10 @@ import com.daoxuan.cctv.util.ValueUtil;
 import com.daoxuan.cctv.utils.ToastUtils;
 
 /**
- * 启动页：直接进入主界面，不依赖网络。
+ * 启动页：直接进入主界面。
+ * 原来是先请求配置接口，拿到结果才决定进主界面 / 弹升级框 / 下载 X5 内核，
+ * 一旦服务端不通或家里网络异常，家人打开电视就卡在这一页进不去。
+ * 现在去掉自更新与 X5 内核，不再依赖网络才能启动。
  */
 public class StartActivity extends Activity {
     private long mClickBackTime = 0;
@@ -39,7 +42,6 @@ public class StartActivity extends Activity {
     }
 
     private void to() {
-        // 根据设置跳转到不同页面（默认开屏进视频点播主页 index，与原作者3.0一致）
         String startPage = ValueUtil.getString(this, "startPage", "main");
         Intent intent;
         if ("live".equals(startPage)) {

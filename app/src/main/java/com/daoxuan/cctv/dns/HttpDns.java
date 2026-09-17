@@ -23,8 +23,7 @@ public class HttpDns implements Dns {
 
     public HttpDns() {
         IResolver[] resolvers = new IResolver[2];
-            //resolvers[0] = AndroidDnsServer.defaultResolver(MyApplication.getContext()); //系统默认 DNS 服务器
-            resolvers[0] = new DnsUdpResolver("223.5.5.5"); //自定义 DNS 服务器地址
+            resolvers[0] = new DnsUdpResolver("223.5.5.5"); 
             resolvers[1] = new DnsUdpResolver("223.6.6.6");
             dnsManager = new DnsManager(NetworkInfo.normal, resolvers);
 
@@ -32,17 +31,17 @@ public class HttpDns implements Dns {
 
     @Override
     public List<InetAddress> lookup(String hostname) throws UnknownHostException {
-        if (dnsManager == null)  //当构造失败时使用默认解析方式
+        if (dnsManager == null)  
             return Dns.SYSTEM.lookup(hostname);
 
         try {
-            Record[] records = dnsManager.queryRecords(hostname);  //获取HttpDNS解析结果
+            Record[] records = dnsManager.queryRecords(hostname);  
             if (records == null || records.length == 0) {
                 return Dns.SYSTEM.lookup(hostname);
             }
 
             List<InetAddress> result = new ArrayList<>();
-            for (Record record : records) {  //将ip地址数组转换成所需要的对象列表
+            for (Record record : records) {  
                 LogUtil.i("record value",hostname+" "+record.value);
                 if(record.value.equals("0.0.0.0")){
                     continue;
@@ -53,7 +52,6 @@ public class HttpDns implements Dns {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        //当有异常发生时，使用默认解析
         return Dns.SYSTEM.lookup(hostname);
     }
 }

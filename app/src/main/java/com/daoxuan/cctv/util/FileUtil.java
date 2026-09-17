@@ -32,11 +32,10 @@ public class FileUtil {
             fos = new FileOutputStream(toFile);
             byte[] buffer = new byte[1024];
             int byteCount;
-            while ((byteCount = is.read(buffer)) != -1) {// 循环从输入流读取
-                // buffer字节
-                fos.write(buffer, 0, byteCount);// 将读取的输入流写入到输出流
+            while ((byteCount = is.read(buffer)) != -1) {
+                fos.write(buffer, 0, byteCount);
             }
-            fos.flush();// 刷新缓冲区
+            fos.flush();
             is.close();
             fos.close();
         }catch (Exception e) {
@@ -51,11 +50,10 @@ public class FileUtil {
             fos = new FileOutputStream(new File(toFile));
             byte[] buffer = new byte[1024];
             int byteCount;
-            while ((byteCount = is.read(buffer)) != -1) {// 循环从输入流读取
-                // buffer字节
-                fos.write(buffer, 0, byteCount);// 将读取的输入流写入到输出流
+            while ((byteCount = is.read(buffer)) != -1) {
+                fos.write(buffer, 0, byteCount);
             }
-            fos.flush();// 刷新缓冲区
+            fos.flush();
             is.close();
             fos.close();
         }catch (Exception e) {
@@ -86,9 +84,11 @@ public class FileUtil {
        String baseFolder= UpdateService.baseFolder+"/";
        String fullPath=baseFolder+extFileName;
        LogUtil.i(TAG,fullPath);
-       // [道玄] assets/tv-web 为权威源，filesDir 副本仅作回退：
-       // 避免早期下载的精简版 utao 包常驻 filesDir 挡道，改源码即生效。
        InputStream asset = readAssertIn(context, extFileName);
+       if (asset == null && !extFileName.startsWith("tv-web/")) {
+           asset = readAssertIn(context, "tv-web/" + extFileName);
+           LogUtil.i(TAG,"readExt retry with prefix tv-web/ -> "+extFileName);
+       }
        if (asset != null) {
            return asset;
        }
@@ -98,6 +98,15 @@ public class FileUtil {
            } catch (FileNotFoundException e) {
                LogUtil.e(TAG, e.getMessage());
                //throw new RuntimeException(e);
+           }
+       }
+       String altPath=baseFolder+"tv-web/"+extFileName;
+       if(new File(altPath).exists()){
+           try {
+               LogUtil.i(TAG,"readExt hit filesDir alt -> "+altPath);
+               return new FileInputStream(altPath);
+           } catch (FileNotFoundException e) {
+               LogUtil.e(TAG, e.getMessage());
            }
        }
        return null;
@@ -137,26 +146,14 @@ public class FileUtil {
         return sb.toString();
     }
     public static void unzipFile(String zipPath, String outputDirectory,boolean skipFirst)throws IOException {
-        /**
-         * 解压assets的zip压缩文件到指定目录
-         * @param context上下文对象
-         * @param assetName压缩文件名
-         * @param outputDirectory输出目录
-         * @param isReWrite是否覆盖
-         * @throws IOException
-         */
 
-        LogUtil.i(TAG,"开始解压的文件： "  + zipPath + "\n" + "解压的目标路径：" + outputDirectory );
-        // 创建解压目标目录
+
         File file = new File(outputDirectory);
-        // 如果目标目录不存在，则创建
         if (!file.exists()) {
             file.mkdirs();
         }
-        // 打开压缩文件
         InputStream inputStream = new FileInputStream(zipPath); ;
         ZipInputStream zipInputStream = new ZipInputStream(inputStream);
-        // 读取一个进入点
         ZipEntry zipEntry = zipInputStream.getNextEntry();
         if(null==zipEntry){
             return;
@@ -171,23 +168,15 @@ public class FileUtil {
                 zipEntry=zipInputStream.getNextEntry();
             }
         }
-        // 使用1Mbuffer
         byte[] buffer = new byte[1024 * 1024];
-        // 解压时字节计数
         int count = 0;
-        // 如果进入点为空说明已经遍历完所有压缩包中文件和目录
         while (zipEntry != null) {
-            //LogUtil.i(TAG,"解压文件 入口 1： " +zipEntry );
             String fileName = zipEntry.getName();
             if(skipFirst){
                 fileName=fileName.substring(firstName.length());
             }
-            if (!zipEntry.isDirectory()) {  //如果是一个文件
-                // 如果是文件
-                //LogUtil.i(TAG,"解压文件 原来 文件的位置： " + fileName);
-                //fileName = fileName.substring(fileName.lastIndexOf("/") + 1);  //截取文件的名字 去掉原文件夹名字
-                LogUtil.i(TAG,"解压文件 的名字： " + fileName);
-                file = new File(outputDirectory + File.separator + fileName);  //放到新的解压的文件路径
+            if (!zipEntry.isDirectory()) {  
+                file = new File(outputDirectory + File.separator + fileName);  
 
                 file.createNewFile();
                 FileOutputStream fileOutputStream = new FileOutputStream(file);
@@ -202,12 +191,9 @@ public class FileUtil {
                 }
             }
 
-            // 定位到下一个文件入口
             zipEntry = zipInputStream.getNextEntry();
-           // LogUtil.i(TAG,"解压文件 入口 2： " + zipEntry );
         }
         zipInputStream.close();
-        LogUtil.i(TAG,"解压完成");
 
     }
 

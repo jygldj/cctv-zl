@@ -23,8 +23,16 @@ public class MainActivity extends BaseWebViewActivity {
     private long mClickBackTime = 0;
     private DialogExitMainBinding exitDialogBinding;
     private boolean isExitDialogShowing = false;
+    /**
+     * 退出确认框正在显示时，不要把焦点抢回 WebView，否则遥控器选不中按钮。
+     */
+    @Override
+    protected boolean shouldFocusWebOnResume() {
+        return !isExitDialogShowing;
+    }
+
     public boolean dispatchTouchEvent(MotionEvent event) {
-        if(event.getAction() == KeyEvent.ACTION_DOWN){
+        if(event.getAction() == MotionEvent.ACTION_DOWN){
             float x= event.getX();
             float y= event.getY();
             //LogUtil.i("dispatchTouchEvent", "x" + x+"y "+y);
@@ -47,11 +55,8 @@ public class MainActivity extends BaseWebViewActivity {
     public void onConfigurationChanged(Configuration newConfig) {
         LogUtil.i(TAG,"onConfigurationChanged...."+newConfig.orientation);
         super.onConfigurationChanged(newConfig);
-        // 检查屏幕方向是否改变
         if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            // 在这里处理横屏模式下的布局调整
         } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
-            // 在这里处理竖屏模式下的布局调整
         }
     }
 
@@ -81,18 +86,15 @@ public class MainActivity extends BaseWebViewActivity {
         int keyCode = event.getKeyCode();
         LogUtil.i("keyDown keyCode ", keyCode+" event" + event);
         
-        // 优先处理退出对话框
         if(isExitDialogShowing){
             if(keyCode==KeyEvent.KEYCODE_BACK){
                 finish();
                 return true;
             }
-            // 退出对话框显示时，让系统处理上下键焦点切换和确认键
             if(keyCode==KeyEvent.KEYCODE_DPAD_UP || keyCode==KeyEvent.KEYCODE_DPAD_DOWN || 
                keyCode==KeyEvent.KEYCODE_DPAD_CENTER || keyCode==KeyEvent.KEYCODE_ENTER){
                 return super.dispatchKeyEvent(event);
             }
-            // 其他按键不处理
             return true;
         }
 
@@ -156,7 +158,6 @@ public class MainActivity extends BaseWebViewActivity {
         return super.dispatchKeyEvent(event);
     }
     private boolean keyBack(){
-        // 如果退出对话框已显示，再次按返回键则退出
         if (isExitDialogShowing) {
             finish();
             return true;
@@ -172,7 +173,6 @@ public class MainActivity extends BaseWebViewActivity {
             return true;
         }
         
-        // 显示退出对话框
         showExitDialog();
         return true;
     }
@@ -187,7 +187,6 @@ public class MainActivity extends BaseWebViewActivity {
         exitDialogBinding.btnCancel.setFocusable(true);
         exitDialogBinding.btnStartToggle.setFocusable(true);
         
-        // 设置启动按钮文案（启动XX）
         String currentStartPage = ValueUtil.getString(this, "startPage", "main");
         if ("main".equals(currentStartPage)) {
             exitDialogBinding.btnStartToggle.setText("启动即电视直播");
@@ -195,10 +194,8 @@ public class MainActivity extends BaseWebViewActivity {
             exitDialogBinding.btnStartToggle.setText("启动即视频点播");
         }
         
-        // 默认焦点在退出按钮上
         exitDialogBinding.btnCancel.post(() -> exitDialogBinding.btnCancel.requestFocus());
 
-        // 默认焦点设置到"取消"按钮
         try {
             exitDialogBinding.btnCancel.setFocusable(true);
             exitDialogBinding.btnCancel.setFocusableInTouchMode(true);
@@ -226,22 +223,18 @@ public class MainActivity extends BaseWebViewActivity {
             return;
         }
 
-        // 取消按钮
         exitDialogBinding.btnCancel.setOnClickListener(v -> {
             hideExitDialog();
         });
         
         
-        // 启动首页切换按钮（仅按钮，点击切换并更新文案）
         exitDialogBinding.btnStartToggle.setOnClickListener(v -> {
             String currentStartPage = ValueUtil.getString(this, "startPage", "main");
             if ("main".equals(currentStartPage)) {
-                // 当前是视频点播，切换到电视直播
                 ValueUtil.putString(this, "startPage", "live");
                 ToastUtils.show(this, "已设置启动首页为：电视直播", Toast.LENGTH_SHORT);
                 exitDialogBinding.btnStartToggle.setText("启动即视频点播");
             } else {
-                // 当前是电视直播，切换到视频点播
                 ValueUtil.putString(this, "startPage", "main");
                 ToastUtils.show(this, "已设置启动首页为：视频点播", Toast.LENGTH_SHORT);
                 exitDialogBinding.btnStartToggle.setText("启动即电视直播");
@@ -252,7 +245,6 @@ public class MainActivity extends BaseWebViewActivity {
 
 
 
-        // 清理缓存
         try {
             exitDialogBinding.btnClearCache.setOnClickListener(v -> {
                 DataCleanManager.cleanInternalCache(this);
@@ -262,11 +254,9 @@ public class MainActivity extends BaseWebViewActivity {
             });
         } catch (Throwable ignore) {}
 
-        // 退出应用
         try {
             exitDialogBinding.btnExitApp.setOnClickListener(v -> {
                 finishAffinity();
-                System.exit(0);
             });
         } catch (Throwable ignore) {}
     }

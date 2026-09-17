@@ -9,13 +9,13 @@ public class JsonUtil {
 
     public static <T> T fromJson(String json,Class<T> tClass){
         Gson gson =  new GsonBuilder()
-                .setLenient()  // 允许非严格JSON
+                .setLenient()  
                 .create();
         return gson.fromJson(json,tClass);
     }
     public static <T> T fromJson(String json, Type typeOfT){
         Gson gson =  new GsonBuilder()
-                .setLenient()  // 允许非严格JSON
+                .setLenient()  
                 .create();
         //Type type = new TypeToken<T>() {}.getType();
         return gson.fromJson(json,typeOfT);

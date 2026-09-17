@@ -18,13 +18,6 @@ import com.daoxuan.cctv.domain.live.Vod;
 import com.daoxuan.cctv.util.FileUtil;
 import com.daoxuan.cctv.util.JsonUtil;
 
-/**
- * 本地电视数据层。
- *
- * 职责：
- *   ① initBaseFolder —— 初始化资源根目录；
- *   ② 本地电视数据的读取与导航（initTvData / getByKey / getByUrl / liveNext / getByLivesWithFavorites）。
- */
 public class UpdateService {
 
     private static final String TAG = "UpdateService";
@@ -32,6 +25,9 @@ public class UpdateService {
 
     /**
      * 只初始化资源根目录。
+     * 原来每次启动都会开线程把 assets/tv-web 全量拷贝到私有目录：既拖慢冷启动，
+     * 又可能在拷贝还没完成时就已经被读取（首屏偶发空白）。
+     * 而 FileUtil.readExtIn 本来就优先读 assets，找不到才回落私有目录，所以这次拷贝是多余的。
      */
     public static void initBaseFolder(Context context) {
         if (context == null) {
@@ -74,11 +70,7 @@ public class UpdateService {
         newLives = lives;
     }
 
-    /**
-     * 获取所有直播数据，包括收藏数据
-     * @param context 上下文
-     * @return 包含收藏栏目的直播数据列表
-     */
+
     public static List<Live> getByLivesWithFavorites(Context context) {
         List<Favorite> favorites = FavoriteService.getInstance(context).getAllFavorites();
         List<Live> lives = new ArrayList<>();
@@ -130,6 +122,7 @@ public class UpdateService {
         }
         return indexVodMap.get(key);
     }
+
 
     public static String liveNext(Integer tagIndexNow, Integer detailIndexNow, String nextType) {
         if (nextType.equals("up")) {

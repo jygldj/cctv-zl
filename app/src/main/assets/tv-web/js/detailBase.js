@@ -22,9 +22,6 @@
              xjChoose(item){
                 let waitId= _layer.wait("请耐心等待跳转。。。");
                  if(""!==item.url){
-                     /* [v4.5.27] 看门狗：跳转没落地（被拦下/加载失败/被取消）时，
-                        6 秒后把「请耐心等待跳转。。。」收掉，否则整页卡死。 */
-                     setTimeout(function(){ try{ _layer.close(waitId); }catch(e){} },6000);
                      window.location.href=item.url;
                      return;
                  }

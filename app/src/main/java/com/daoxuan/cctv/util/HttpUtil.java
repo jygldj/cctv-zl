@@ -200,14 +200,8 @@ public class HttpUtil {
         });
     }
 
-        /**
-         * 带进度下载模式：DownloadProgressListener进度监听器
-         *
-         * @param url
-         * @param listener
-         */
+
         public static void downloadByProgress(final String url, File targetFile,final DownloadProgressListener listener){
-            // 设置响应时间
             OkHttpClient client=defaultClient;
             Request request=new Request.Builder()
                     .url(url)
@@ -223,18 +217,18 @@ public class HttpUtil {
                 public void onResponse(Call call, Response response) throws IOException {
                    // File target = new File(filePath);
                             //FileUtil.generateFile(url);
-                    InputStream is=response.body().byteStream();   //相应体获得inputStream
-                    BufferedInputStream bis=new BufferedInputStream(is);//将inputstream转换成bufferedinputstream
+                    InputStream is=response.body().byteStream();   
+                    BufferedInputStream bis=new BufferedInputStream(is);
                     byte[] content = new byte[1024];
-                    int len=0;                                          //每次读取长度
+                    int len=0;                                          
                     long sumReaded = 0L;
-                    long contentSize=response.body().contentLength();   //下载文件总长度
-                    FileOutputStream fos=new FileOutputStream(targetFile);    //创建fileOutputStream
-                    while((len=bis.read(content))!=-1){                 //循环获取字节流
-                        fos.write(content,0,len);                  //写入文件，读取byte[]中的缓存
-                        sumReaded+=len;                                 //获取已下载长度
+                    long contentSize=response.body().contentLength();   
+                    FileOutputStream fos=new FileOutputStream(targetFile);    
+                    while((len=bis.read(content))!=-1){                 
+                        fos.write(content,0,len);                  
+                        sumReaded+=len;                                 
                         listener.onDownloadProgress
-                                (sumReaded,contentSize,false); //监听下载进度，是否下载完成
+                                (sumReaded,contentSize,false); 
                     }
                     listener.onDownloadResult(targetFile,true);
                     fos.flush();

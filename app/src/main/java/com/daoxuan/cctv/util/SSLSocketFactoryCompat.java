@@ -139,7 +139,6 @@ public class SSLSocketFactoryCompat extends SSLSocketFactory {
         return ssl;
     }
 
-    //定义一个信任所有证书的TrustManager
     public static final X509TrustManager trustAllCert = new X509TrustManager() {
         @Override
         public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) throws CertificateException {

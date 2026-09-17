@@ -8,9 +8,6 @@ import android.provider.Settings;
 
 import androidx.multidex.MultiDex;
 
-
-import android.webkit.WebView;
-
 import java.util.Random;
 import java.util.UUID;
 
@@ -37,8 +34,6 @@ public class MyApplication extends Application  {
         LogUtil.i(TAG, "onViewInitBegin: ");
         allErrorCatch();
         context = getApplicationContext();
-        // Android P 及以上，确保多进程使用 WebView 时数据目录隔离，避免初始化崩溃
-        initPieWebView();
         androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
         if(null==androidId){
             LogUtil.i(TAG, "androidId: getUUID");
@@ -49,7 +44,6 @@ public class MyApplication extends Application  {
         try {
             System.setProperty("persist.sys.media.use-mediaDrm", "false");
         } catch (Exception e) {
-            // 安全处理异常
             LogUtil.e("use-mediaDrm:"+e.getMessage());
         }
     }
@@ -57,7 +51,6 @@ public class MyApplication extends Application  {
         StringBuilder result = new StringBuilder();
         Random random = new Random();
         for (int i = 0; i < length; i++) {
-            // 生成97-122之间的随机整数，对应ASCII码中的a-z
             int randomInt = random.nextInt(26) + 97;
             result.append((char) randomInt);
         }
@@ -68,7 +61,6 @@ public class MyApplication extends Application  {
         Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
             @Override
             public void uncaughtException(Thread thread, Throwable throwable) {
-                // 检查是否为 SurfaceTexture 相关异常
                 if (throwable != null && throwable.getMessage() != null &&
                         (throwable instanceof NullPointerException) &&
                         (throwable.getStackTrace() != null && throwable.getStackTrace().length > 0 &&
@@ -76,12 +68,10 @@ public class MyApplication extends Application  {
 
                     LogUtil.e("Application", "捕获到 SurfaceTexture 相关异常: " + throwable.getMessage());
 
-                    // 记录非致命异常但不终止应用
                     CrashHandler.recordNonFatal(getApplicationContext(), throwable);
                     return;
                 }
 
-                // 其他异常，交给系统默认处理器，避免递归
                 if (systemDefault != null) {
                     systemDefault.uncaughtException(thread, throwable);
                 } else {
@@ -89,7 +79,6 @@ public class MyApplication extends Application  {
                 }
             }
 
-            // 检查堆栈跟踪是否包含 SurfaceTexture 相关内容
             private boolean containsSurfaceTextureInStackTrace(StackTraceElement[] stackTrace) {
                 for (StackTraceElement element : stackTrace) {
                     if (element.getClassName().contains("SurfaceTexture") ||
@@ -103,15 +92,6 @@ public class MyApplication extends Application  {
     }
     public static Context getAppContext() {
         return context;
-    }
-    private static final String PROCESS = "com.daoxuan.cctv";
-    private void initPieWebView() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            String processName = getProcessName(this);
-            if (!PROCESS.equals(processName)) {
-                WebView.setDataDirectorySuffix(getString(processName, "daoxuan"));
-            }
-        }
     }
     public String getProcessName(Context context) {
         if (context == null) return null;
@@ -144,20 +124,17 @@ public class MyApplication extends Application  {
                 Build.ID.length() % 10 + Build.MANUFACTURER.length() % 10 +
                 Build.MODEL.length() % 10 + Build.PRODUCT.length() % 10 +
                 Build.TAGS.length() % 10 + Build.TYPE.length() % 10 +
-                Build.USER.length() % 10; //13 位
+                Build.USER.length() % 10; 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 serial = "默认值";
             } else {
                 serial = Build.SERIAL;
             }
-            //API>=9 使用serial号
             return new UUID(m_szDevIDShort.hashCode(), serial.hashCode()).toString();
         } catch (Exception exception) {
-            //serial需要一个初始化
-            serial = "默认值"; // 随便一个初始化
+            serial = "默认值"; 
         }
-        //使用硬件信息拼凑出来的15位号码
         return new UUID(m_szDevIDShort.hashCode(), serial.hashCode()).toString();
     }
 

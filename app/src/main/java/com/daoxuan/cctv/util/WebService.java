@@ -50,7 +50,6 @@ public class WebService extends NanoHTTPD {
         if(uri.endsWith("ctrl")){
             String url= stringListMap.get("url").get(0);
             //BaseWebViewActivity.mWebView.loadUrl(url);
-            // 通过分发器在主线程触发前台 WebView 加载
             WebViewDispatcher.loadUrl(url);
 
             return newFixedLengthResponse(Response.Status.OK, mimetype, "ok");

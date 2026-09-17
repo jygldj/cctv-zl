@@ -16,14 +16,14 @@ if(typeof _tvload == "undefined"){
         return null;
     }
     let detailPath=loadDetailByUrl(window.location.href);
-    console.log("detailPath:: "+detailPath);
     if(null!=detailPath){
-        _tvLoadRes.css(_browser.getURL("css/my.css?v=x"));
-        _tvLoadRes.js(_browser.getURL("js/zepto.min.js?v=x"));
-        _tvLoadRes.js(_browser.getURL("js/common.js?v=x"));
-        _tvLoadRes.js(_browser.getURL("js/myfocus.js?v=x"));
-        _tvLoadRes.js(_browser.getURL("js/vuex.min.js?v=x"));
-        _tvLoadRes.js(_browser.getURL("js/detailBase.js?v=x"));
-        _tvLoadRes.js(_browser.getURL(`js/${detailPath}/detail.js?v=x`));
+        let baseUrl = window.location.origin + "/tv-web/";
+        _tvLoadRes.css(baseUrl + "css/my.css?v=x");
+        _tvLoadRes.js(baseUrl + "js/zepto.min.js?v=x");
+        _tvLoadRes.js(baseUrl + "js/common.js?v=x");
+        _tvLoadRes.js(baseUrl + "js/myfocus.js?v=x");
+        _tvLoadRes.js(baseUrl + "js/vuex.min.js?v=x");
+        _tvLoadRes.js(baseUrl + "js/detailBase.js?v=x");
+        _tvLoadRes.js(baseUrl + "js/" + detailPath + "/detail.js?v=x");
     }
 })();

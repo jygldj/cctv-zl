@@ -17,7 +17,6 @@ public abstract class BaseBindingAdapter<T, D extends ViewDataBinding> extends R
     private final List<T> datas;
     private  final  int layoutId;
 
-    //用于设置Item的事件Presenter
     protected IBaseBindingPresenter ItemPresenter;
 
     public BaseBindingAdapter(List<T> datas, int layoutId) {
@@ -51,10 +50,7 @@ public abstract class BaseBindingAdapter<T, D extends ViewDataBinding> extends R
         return datas == null ? 0 : datas.size();
     }
 
-    /**
-     * 用于设置Item的事件Presenter
-     *
-     */
+
     public void setItemPresenter(IBaseBindingPresenter itemPresenter) {
         ItemPresenter = itemPresenter;
     }

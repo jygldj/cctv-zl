@@ -19,7 +19,6 @@ public class BootReceiver extends BroadcastReceiver {
             !"android.intent.action.LOCKED_BOOT_COMPLETED".equals(action)) {
             return;
         }
-        // 仅在用户开启自启动时启动主界面
         String autoStart = ValueUtil.getString(context, "autoStart", "0");
         if (!"1".equals(autoStart)) {
             return;

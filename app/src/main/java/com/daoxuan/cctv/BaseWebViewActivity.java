@@ -3,6 +3,7 @@ package com.daoxuan.cctv;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.os.Build;
 import android.os.SystemClock;
 import android.util.Log;
@@ -76,6 +77,17 @@ public class BaseWebViewActivity extends BaseActivity {
     protected String TAG = "BaseWebViewActivity";
     private static final String mHomeUrl =
             "file:///android_asset/tv-web/index.html";
+
+    /* 本地页视频的「默认海报」替换值。
+       WebView 在 <video> 没有 poster 属性时会拿 WebChromeClient.getDefaultVideoPoster()
+       的返回值当海报画上去，系统默认给的是「灰底 + 大播放图标」——片库/栏目直连 m3u8 时，
+       它就是起播前那 1~2 秒的播放按钮（那张图是方的，所以画出来是个居中灰方块）。
+       返回 1x1 全透明位图即取消该海报，露出的就是页面自身底色（本地页统一 #0a1f3a）。
+       范围仅限本类：首页 / 央视片库 / 央视栏目 / 支持我 / live.html。
+       LiveActivity（央视网、CCTV直播）另有一套 WebChromeClient，不继承本类，原样不动。 */
+    private static final Bitmap TRANSPARENT_VIDEO_POSTER =
+            Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
+
     protected  ActivityMainBinding binding;
 
     @Override
@@ -131,6 +143,14 @@ public class BaseWebViewActivity extends BaseActivity {
 
     protected void initWebChromeClient() {
         mWebView.setWebChromeClient(new WebChromeClient() {
+            /* 取消 WebView 自带的视频默认海报（灰底 + 大播放图标）。
+               这不是页面 CSS 能盖住的东西：它由 WebView 在起播前直接画在视频区域，
+               所以此前 xgplayer 侧怎么调都没有效果。返回透明位图即可，见字段注释。 */
+            @Override
+            public Bitmap getDefaultVideoPoster() {
+                return TRANSPARENT_VIDEO_POSTER;
+            }
+
             @Override
             public void onProgressChanged(WebView view, int newProgress) {
                 LogUtil.i("WebChromeClient", "onProgressChanged, newProgress:" + newProgress + ", view:" + view);
@@ -409,11 +429,12 @@ public class BaseWebViewActivity extends BaseActivity {
     private boolean sessionActive = false;
 
     /**
-     * 遮罩防抖：加载慢才显示，显示了就别一闪而过。
-     * 本地页几十毫秒就加载完，若 onPageStarted 立刻弹遮罩会闪一下，反而更难看，
-     * 因此延后 SHOW_DELAY 仍未完成才显示；一旦显示，至少保留 MIN_SHOW 再收。
+     * 遮罩收起时的防抖：显示了就别一闪而过，至少留住 MIN_SHOW。
+     *
+     * 原先还有配对的 SHOW_DELAY（延后 260ms 才显示），用于避免本地页「刚盖就加载完、
+     * 遮罩一闪」。v4.5.42 起本地页不再敷设遮罩，那一层连同 pendingShowRunnable 一并删除，
+     * 只保留「收起防抖」这一半。
      */
-    private static final long OVERLAY_SHOW_DELAY_MS = 260L;
     private static final long OVERLAY_MIN_SHOW_MS = 420L;
     /**
      * 一次「点节目 → 出画面」的连续会话上限，内含多次页面跳转。
@@ -438,8 +459,10 @@ public class BaseWebViewActivity extends BaseActivity {
     /**
      * 连续这么多次探测不到 video 元素，就认定不是播放页（央视栏目/列表页），别再干等。
      *
-     * 按 24 次 × 150ms ≈ 3.6s 计：足以覆盖一次「专辑页 → 播放页」的自动跳转，
-     * 又不至于把真正的列表页挡死。窗口若太短，会遮罩先收、跳转未发生，裸骨架露 1~2 秒。
+     * 原为 5 次 × 300ms = 1.5s；v4.5.12 把轮询间隔缩到 150ms 时没同步改这个次数，
+     * 判定窗口被顺带砍到 0.75s，实测正好卡在「专辑页 → 播放页」自动跳转的空档上——
+     * 遮罩先收、跳转未发生，裸骨架露 1~2 秒。
+     * 现按 24 次 × 150ms ≈ 3.6s 计：足以覆盖一次自动跳转，又不至于把真正的列表页挡死。
      */
     private static final int FS_NOVIDEO_MAX = 24;
 
@@ -497,7 +520,21 @@ public class BaseWebViewActivity extends BaseActivity {
         return url.contains("tv.cctv.com") || url.contains("yangshipin.cn");
     }
 
-    private Runnable pendingShowRunnable = null;
+    /**
+     * 本地资产页（工程内联的 tv-web 页面）：首页 index.html、央视片库 cctv.html、
+     * 央视栏目 column.html、支持我 dsm.html，以及本地播放页 live.html。
+     *
+     * 这些页面一律不经站点渲染，自身底色即 #0a1f3a 深蓝（见 css/my.css 与 css/rset.css
+     * 的 html,body），**没有站点骨架可挡**，遮罩对它们毫无作用。
+     *
+     * 注：v4.5.42 起计时逻辑已改成白名单式（只有 isVideoPage 才考虑遮罩），
+     * 本方法随之不再参与遮罩判定，保留仅作页面归属的自说明。
+     */
+    private static boolean isLocalAssetPage(String url) {
+        if (url == null) { return false; }
+        return url.contains("tv-web") || url.contains("live.html");
+    }
+
     private Runnable pendingHideRunnable = null;
     private Runnable fsPollRunnable = null;
     private long overlayShownAt = 0L;
@@ -611,7 +648,6 @@ public class BaseWebViewActivity extends BaseActivity {
 
     private void showLoadingOverlay() {
         try {
-            cancelPendingShow();
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -647,12 +683,9 @@ public class BaseWebViewActivity extends BaseActivity {
      */
     private void hideLoadingOverlay() {
         try {
+            /* 收罩必须是终态。v4.5.42 起已无「延迟待显示」这一层（见 onPageLoadStarted
+               改为白名单式），不会再出现罩被排队的定时器重新弹出、且无人收的情况。 */
             cancelPendingHide();
-            /* 「收罩」必须是终态：把仍在排队的「待显示」也一并取消，
-               否则 onProgressChanged(100) / JS hideLoading 抢先收罩、而 onPageLoadFinished
-               没赶上取消「待显示」时，260ms 后遮罩会被重新弹出来且再无人收——表现就是
-               回首页/片库偶尔黑遮罩去不掉。视频流程里 onPageLoadFinished 本就会 cancel，这里补一道兜底。 */
-            cancelPendingShow();
             if (overlayShownAt <= 0) {
                 hideLoadingOverlayInternal(true);
                 return;
@@ -742,8 +775,14 @@ public class BaseWebViewActivity extends BaseActivity {
     }
 
     /**
-     * 任何一次页面跳转都先安排遮罩。此前只有 LiveActivity.loadLiveUrl() 弹遮罩，
-     * 导致片库/栏目/央视直播三个入口加载期间网页骨架裸露。
+     * 计时器的唯一用途，是给「网页脱壳」等待期间遮一遮，别让裸骨架露出来。
+     *
+     * 因此这里是**白名单式**的：只有 isVideoPage(url)（tv.cctv.com / yangshipin.cn）
+     * 才安排遮罩，其余页面一律不安排、什么也不做。
+     *
+     * 此前写反了——「任何一次页面跳转都先安排遮罩」，于是首页、央视片库、央视栏目、
+     * 支持我、本地播放页 live.html 每次换页都弹一次「正在加载… 0.4~0.6s」，
+     * 与脱壳毫无关系。v4.5.42 从根因改回白名单，本地页不再有任何计时逻辑。
      */
     @Override
     protected void onPageLoadStarted(String url) {
@@ -761,50 +800,21 @@ public class BaseWebViewActivity extends BaseActivity {
             cctvStageCount++;
             loadingPrefix = (cctvStageCount <= 1) ? "正在打开节目页…" : "正在进入播放页…";
             /* 会话中的跳转必须「立刻」盖上：这几十到几百毫秒的跳转窗口，正是骨架最容易
-               露出来的地方。260ms 防抖只对本地页有意义（本地页几十毫秒就加载完，弹罩会
-               闪一下），央视页本身就要几百毫秒起步，无闪的风险，直接盖。 */
-            cancelPendingShow();
+               露出来的地方。央视页本身就要几百毫秒起步，不存在本地页那种「刚盖就加载完、
+               遮罩一闪」的问题，直接盖。 */
             cancelPendingHide();
             stopFsPoll();
             showLoadingOverlay();
             return;
         }
-        /* 回到本地页（首页/片库/栏目）：本次会话结束，正常收罩。 */
+        /* 非脱壳页：首页 / 央视片库 / 央视栏目 / 支持我 / 本地播放页 live.html。
+           这里没有站点骨架可挡，不安排任何遮罩；会话状态同时复位。
+           页面自身底色已是 #0a1f3a（见 css/my.css、css/rset.css），不会白闪。 */
         sessionActive = false;
         sessionStartAt = 0L;
         cctvStageCount = 0;
         loadingPrefix = "正在加载…";
-        scheduleLoadingOverlay(url);
-    }
-
-    private void scheduleLoadingOverlay(String url) {
-        try {
-            cancelPendingShow();
-            cancelPendingHide();
-            stopFsPoll();
-            if (binding == null || binding.loadingOverlay == null) { return; }
-            pendingShowRunnable = new Runnable() {
-                @Override
-                public void run() {
-                    pendingShowRunnable = null;
-                    showLoadingOverlay();
-                }
-            };
-            binding.loadingOverlay.postDelayed(pendingShowRunnable, OVERLAY_SHOW_DELAY_MS);
-        } catch (Exception e) {
-            LogUtil.e(TAG, "scheduleLoadingOverlay error: " + e.getMessage());
-        }
-    }
-
-    private void cancelPendingShow() {
-        try {
-            if (pendingShowRunnable != null && binding != null && binding.loadingOverlay != null) {
-                binding.loadingOverlay.removeCallbacks(pendingShowRunnable);
-            }
-        } catch (Exception e) {
-            LogUtil.e(TAG, "cancelPendingShow error: " + e.getMessage());
-        }
-        pendingShowRunnable = null;
+        stopFsPoll();
     }
 
     /**
@@ -902,10 +912,9 @@ public class BaseWebViewActivity extends BaseActivity {
      */
     @Override
     protected void onPageLoadFinished(String url) {
-        cancelPendingShow();
         if (sessionActive && isVideoPage(url)) {
-            /* 会话进行中：专辑页也好、播放页也好，都不收罩——
-               否则「这一页收、下一段再弹」的空档会露出裸骨架。 */
+            /* 会话进行中：专辑页也好、播放页也好，都不收罩。
+               原先是「这一页加载完就收、下一段再弹」，中间的空档正是实测看到的裸骨架。 */
             if (overlayShownAt <= 0) { showLoadingOverlay(); }
             startFsPoll();
             return;

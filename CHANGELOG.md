@@ -1,5 +1,553 @@
 # 更新日志
 
+## v4.5.43 (2026-09-17) - 取消 WebView 自带的视频默认海报（片库/栏目起播前那个播放按钮）
+
+### 一、现象
+
+央视片库 / 央视栏目是 m3u8 直连、纯本地页，起播前画面中央会先出现
+**一个灰底大播放图标，约 1~2 秒后消失**。截图（1280×720）：
+
+- 左右两侧是页面底色 `#0a1f3a`；
+- 中间一块**正方形**灰块 `#888888`，宽 720 = 屏幕高 720，水平居中；
+- 灰块正中一个黑色圆环 + 实心三角的播放图标，直径约 573px。
+
+### 二、排查：先把「不是谁」排除掉
+
+| 假设 | 验证方式 | 结论 |
+|---|---|---|
+| xgplayer 的 `xgplayer-start` 起播按钮 | 读 `js/xg/index.min.css` + `2.31.2/index.min.js` | ✘ 该图标是 70px 纯三角（SVG path 无圆环），且被 `.xgplayer-playing` 隐藏 |
+| xgplayer 的 `xgplayer-poster` | 同上 | ✘ 2.31.2 只在 `config.poster` 有值时才创建该节点；live.js 未配置 |
+| 某个我方 CSS 画的灰块 | 全量检索 `#888 / 888888 / rgb(136,136,136) / 53%` | ✘ 项目自身样式里**一条都没有** |
+| 原生 `loadingOverlay` | 读 `activity_main.xml` | ✘ 那是黑底全屏，不是灰块 |
+| Chromium 原生媒体控件 | **对照实验**（Chromium 121 内核，1280×720 截图 + 逐像素比对） | ✔ 命中 |
+
+对照实验（三份最小页面，同一个假 m3u8）：
+
+| 页面 | 结果 |
+|---|---|
+| `<video autoplay playsinline>`（无 `controls`） | 纯底色，**什么都没有** |
+| 同上 + `controls` | 出现灰色方块 + 大播放图标（仅色值随主题不同） |
+| 同上 + `controls` + 1×1 透明 `poster` | 灰底消失，**图标仍在** |
+
+再用 `--dump-dom` 抓真实 `live.html` 的 DOM，`<video>` 标签实际是：
+
+```html
+<video class="" autoplay="" tabindex="2" mediatype="video" src="blob:...">
+```
+
+**没有 `controls` 属性**——所以桌面 Chromium 复现不出灰块，而 Android WebView 能。
+
+### 三、根因：Android WebView 的「默认视频海报」
+
+Android WebView 在 `<video>` **没有 `poster` 属性**时，会向宿主索取一张默认海报：
+
+```java
+WebChromeClient.getDefaultVideoPoster()   // 系统默认返回「灰底 + 大播放图标」
+```
+
+WebView 把这张图当海报画在视频区域上，起播出画后自然被视频盖掉——就是那 1~2 秒。
+
+两个细节正好对上截图：
+
+1. 系统默认海报是**方图**，按 contain 缩放后宽=屏幕高 → 呈现为**居中正方形灰块**；
+2. 它是浏览器层画的，**不在页面 DOM/CSS 里**，所以 xgplayer 侧怎么调都没用。
+
+### 四、改法：把默认海报换成 1×1 透明位图
+
+只改 `BaseWebViewActivity.java` 一个文件：
+
+```java
+/* 本地页视频的「默认海报」替换值。 */
+private static final Bitmap TRANSPARENT_VIDEO_POSTER =
+        Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
+
+@Override
+public Bitmap getDefaultVideoPoster() {
+    return TRANSPARENT_VIDEO_POSTER;
+}
+```
+
+取消海报后，起播前露出的就是页面自身底色 `#0a1f3a`（和 5 个入口的深蓝一致，
+不再有方块闪烁）。
+
+### 五、影响面与安全边界
+
+| 范围 | 是否受影响 |
+|---|---|
+| 首页 / 央视片库 / 央视栏目 / 支持我 / `live.html` | ✔ 由 `BaseWebViewActivity` 承载，默认海报取消 |
+| 地方台站点页（`WebViewClientImpl type=0`） | ✔ 附带受益，同一 WebView，无功能损失（默认海报本就不可点） |
+| **央视网（tv.cctv.com）、CCTV 直播（yangshipin.cn）** | ✘ **原样不动**：`LiveActivity extends BaseActivity`，自带一套 `WebChromeClient`，不继承本类 |
+
+未动任何 JS / CSS / 取流逻辑：`live.js`、`xgplayer`、三文件（`LiveActivity.java`
+`load_detail_tv.js` `load_detail_video.js`）指纹不变。
+
+### 六、校验
+
+`getDefaultVideoPoster` 覆写点 1 处、透明位图字段 1 处；
+`BaseWebViewActivity.java` 圆括号 625/625 配平（花括号差额与 HEAD 一致，为字符串内 JS 花括号所致）。
+
+> 备注：`impl/WebChromeClientImpl.java` 当前无任何引用（历史遗留），未在本版清理。
+
+## v4.5.42 (2026-09-17) - 根因修复：计时器改为白名单式，只为「网页脱壳」存在
+
+### 一、根因不是「漏了哪些页面」，而是逻辑写反了
+
+v4.5.40 / v4.5.41 都是在 **`onPageLoadStarted` 外面加一层拦截**（识别本地页 → 取消延时显示），
+属于「先装了再拦下来」的补丁，机制本身还在。
+
+真正的病根写在方法注释的原话里：
+
+> 任何一次页面跳转都先安排遮罩。
+
+**这句话就是错的。** 计时器存在的唯一理由是「网页脱壳等待期别让裸骨架露出来」，
+那么它只该服务于 `isVideoPage(url)`（tv.cctv.com / yangshipin.cn）。
+其余页面——首页、央视片库、央视栏目、支持我、本地播放页 live.html——
+既不经站点渲染，自身又是深蓝底，**压根不该进入这套逻辑**。
+
+### 二、改法：由「全部敷设 + 例外拦截」改回「白名单」
+
+```java
+protected void onPageLoadStarted(String url) {
+    if (isVideoPage(url)) {          // ← 只有这里才安排遮罩
+        ...会话起算 + 立刻盖...
+        showLoadingOverlay();
+        return;
+    }
+    /* 非脱壳页：不安排任何遮罩，会话状态复位。 */
+    sessionActive = false;
+    sessionStartAt = 0L;
+    cctvStageCount = 0;
+    loadingPrefix = "正在加载…";
+    stopFsPoll();
+}
+```
+
+随之把整套「延时显示」机制连根拔掉，不留死代码：
+
+| 删除项 | 原作用 |
+|---|---|
+| `scheduleLoadingOverlay()` | 延后 260ms 才弹罩（根因所在的调度器） |
+| `cancelPendingShow()` | 取消那个待弹的任务（含 4 处调用点） |
+| `pendingShowRunnable` 字段 | 上面的 Runnable 本体 |
+| `OVERLAY_SHOW_DELAY_MS = 260L` | 延时常量 |
+
+保留 `OVERLAY_MIN_SHOW_MS`（420ms）——那是「显示后别一闪而过」的**收起**防抖，
+与「要不要显示」无关，仍服务于脱壳场景。
+
+另：`isLocalAssetPage()` 不再参与遮罩判定（默认就不安排了），保留作页面归属的自说明。
+
+### 三、为什么不会出现「遮罩没人收」
+
+- `onPageLoadFinished` 仍会走 `hideLoadingOverlay()` 正常收罩；
+- `onProgressChanged(100)` 支路：`!sessionActive` 时才收，本地页会话已复位，
+  且 `overlayShownAt <= 0` 时会安全返回，不会有多余动作；
+- JS 桥接 `showLoading` 扫描后**已无任何 JS 调用方**（仅 `load_detail_tv.js` 用
+  `hideLoading` 通知脱壳完成），保留作显式通道，不会产生自发弹罩。
+
+### 四、影响面
+
+- 只改 `BaseWebViewActivity.java` 一个文件，净减约 30 行；
+- **LiveActivity 完全不动**：它自己覆写 `onPageLoadStarted`，内部也没有
+  `pendingShowRunnable / scheduleLoadingOverlay`（引用数 0），央视网链路不受影响；
+- CCTV 直播（yangshipin.cn）在 MainActivity 内，走 `isVideoPage` 命中，**计时器照常**。
+
+### 五、校验
+
+全量 61 个 Java 文件剥离注释与字符串后精确配平：**全部 ✔**；
+`cancelPendingShow / scheduleLoadingOverlay / pendingShowRunnable / OVERLAY_SHOW_DELAY_MS`
+代码引用数 **0**（仅剩一条注释提及）。
+
+> ⚠️ 后续若再做「整树对齐 gao」，务必保住本版：`assets` 侧的 BuildConfig.DEBUG、
+> WebView 性能设置可以对齐，但 `onPageLoadStarted` 的白名单结构属于本项目自有修正，
+> 别被 gao 的旧逻辑冲掉。
+
+## v4.5.41 (2026-09-17) - 取消遮罩范围补全：从「播放页」扩到「所有本地资产页」
+
+### 一、v4.5.40 实测反馈：只做了一半
+
+老王装包后反馈：
+
+> 首页点击「央视片库」——计时器 **0.4-0.6 秒**进入电视剧列表。
+> 桌面启动「道玄电视」**随机**出现计时器（进入首页前），但不是每次都出现。
+
+两条都仍命中原生遮罩。
+
+### 二、时长对上了：就是那个 260ms + 420ms
+
+```
+OVERLAY_SHOW_DELAY_MS = 260L   // 延迟多久才弹
+OVERLAY_MIN_SHOW_MS   = 420L   // 一旦弹出至少停留多久
+```
+
+260 + 420 = **680ms**，与实测的 0.4~0.6 秒吻合。
+
+「随机出现」也解释得通：首页 `index.html` 的加载耗时在 260ms 这条线上下浮动，
+有时没到 260ms 就加载完了（`onPageLoadFinished` 抢先 `cancelPendingShow`），
+有时超了就被 260ms 后的定时器弹出来。
+
+### 三、漏在哪：v4.5.40 只拦了 live.html
+
+上一版判据是 `tv-web && live.html`，只覆盖**播放页**。而 `cctv.html`（片库列表）、
+`column.html`（栏目列表）、`index.html`（首页）都是本地页，一样走
+「本地页」分支 → `scheduleLoadingOverlay()` → 260ms 后弹罩，全部漏掉。
+
+### 四、改法：判据放宽到本地资产页
+
+```java
+private static boolean isLocalAssetPage(String url) {
+    if (url == null) { return false; }
+    return url.contains("tv-web") || url.contains("live.html");
+}
+```
+
+（`||` 而非 `&&`：`shouldInterceptRequest` 会把 `live.html` 的 URL 前缀规格化，
+单看 `tv-web` 未必总在，留一条双保险。）
+
+分支里的**会话复位必须一并前移**——这是本版最关键的一处：
+
+```java
+if (isLocalAssetPage(url)) {
+    sessionActive = false;      // ← 原本写在 else 分支里
+    sessionStartAt = 0L;
+    cctvStageCount = 0;
+    loadingPrefix = "正在加载…";
+    cancelPendingShow();        // 只掐「尚未弹出」的
+    stopFsPoll();
+    return;
+}
+```
+
+若不复位移到此处，`sessionActive` 会残留 `true`，下一次访问本地页时被误判成
+「仍在脱壳会话中」，遮罩又会弹回来——改了等于没改。
+
+仍保留 v4.5.40 的取舍：**只取消尚未弹出的罩**。地方台脱壳链跳 `live.html?url=` 时，
+那层罩是从站点页带过来的、本就在显示，保持不动，由 `onPageLoadFinished` 正常收。
+
+### 五、为什么不会白闪（取消遮罩的前提）
+
+先确认过底色才敢取消：
+
+| 页面 | 深色底来源 |
+|---|---|
+| `cctv.html` / `column.html` / `tv.html` | `css/rset.css` → `html,body{background:#0a1f3a}` |
+| `index.html`（只引 my.css） | `css/my.css` 第 1 行 → `html,body{background:#0a1f3a}` |
+| `dsm.html` | 内联 `background-color:#0a1f3a` |
+| `live.html` | 内联 `#0a1f3a` |
+
+四个栏目自身就是深蓝底，不存在「骨架裸露」。
+
+### 六、影响面
+
+- 仍只改 `BaseWebViewActivity.java` 一个文件；
+- 央视网 / CCTV 直播走 `LiveActivity`，它**自己覆写了 `onPageLoadStarted`**（893 行），
+  完全不受本次改动影响，那里该弹的罩照弹。
+
+### 七、校验
+
+剥离注释与字符串后精确配平：**净括号 0、最小深度 0 ✔**；旧方法名 `isLocalPlayerPage`
+引用数 0，无残留。
+
+## v4.5.40 (2026-09-17) - 央视片库 / 央视栏目：取消本地播放页的脱壳遮罩
+
+### 一、诉求
+
+片库、栏目都是「取到 m3u8 直接交给本地播放器」，全程不经过站点页面，没有骨架可遮，
+起播前那层遮罩纯属多余，要求取消。
+
+### 二、定位：遮罩不是页面造的，是原生弹的
+
+先排除页面侧：`js/xg/live.js`（本地播放器，234 行）全文检索 `mask / loading / overlay / wait`
+**零命中**，`live.html` 自身也没任何浮层元素。所以这层罩只可能来自原生。
+
+原生侧 `BaseWebViewActivity` 的判定：
+
+```java
+private static boolean isVideoPage(String url) {
+    return url.contains("tv.cctv.com") || url.contains("yangshipin.cn");
+}
+```
+
+`live.html` **不是** video page，于是走「本地页」分支 → `scheduleLoadingOverlay()`
+→ 260ms 后弹罩（带「正在加载…」计时文字）→ 直到 `onPageLoadFinished` 才收。
+而 `live.html` 要先加载 xgplayer + hls.js（约 508KB），**遮罩得等播放器加载完才退**——
+这就是那多出来的一段黑幕。
+
+### 三、改法：只取消「尚未弹出」的罩（关键取舍）
+
+新增判定方法：
+
+```java
+private static boolean isLocalPlayerPage(String url) {
+    if (url == null) { return false; }
+    return url.contains("tv-web") && url.contains("live.html");
+}
+```
+
+在 `onPageLoadStarted` 开头拦截：
+
+```java
+if (isLocalPlayerPage(url)) {
+    cancelPendingShow();   // 只掐掉「待弹出」的那个
+    stopFsPoll();
+    return;
+}
+```
+
+**为什么不顺手把已显示的罩也 hide 掉**：`js/tv/common/detail.js:68` 表明地方台脱壳链
+也会跳 `live.html?url=`。那条链的遮罩是**从站点页带过来、本就显示中**的，一刀切 hide
+会让地方台在播放器就位前露出底色空档。用「只取消尚未弹出的」来区分：
+
+| 场景 | 跳转前遮罩状态 | 结果 |
+|---|---|---|
+| 片库 / 栏目 → live.html | 未显示（本地页几十毫秒加载完） | **不再弹** ✓ |
+| 地方台脱壳 → live.html | 显示中 | 保持，由 `onPageLoadFinished` 正常收 ✓ |
+
+收罩路径未动：live.html 不是 video page，`onPageLoadFinished` 仍走 else → `hideLoadingOverlay()`，
+已显示的罩照常收起，不存在「没人收」的风险。
+
+### 四、影响面
+
+- 只改 `app/src/main/java/com/daoxuan/cctv/BaseWebViewActivity.java` 一个文件（增 31 行）；
+- `LiveActivity` 独立一套遮罩且未覆写 `onPageLoadStarted`，**央视网 / CCTV 直播零影响**
+  （md5 对账：`LiveActivity.java`、`load_detail_tv.js`、`load_detail_video.js` 全部未变）；
+- `live.html` 的 `html/body` 底色本就是 `#0a1f3a`，取消遮罩后不会白闪。
+
+### 五、校验
+
+剥离注释与字符串后精确配平：**净括号 0、最小深度 0 ✔**。
+
+## v4.5.39 (2026-09-17) - 央视片库与央视网彻底分家：专属页面脚本 + 焦点悬空救援
+
+### 一、背景：片库被央视网的共用文件拖累
+
+整树对齐 gao（v4.5.38）后，`js/home.js` 同时被央视网 `tv.html` 与片库 `cctv.html` 加载，
+其中片库专属的 `yearRange()` 在 gao 版中不存在，导致 `_data.initData()` 抛异常中断，
+表现为「顶部导航栏在、节目列表空白」。根因是**两个业务共用一份页面脚本**。
+
+### 二、画质结论修正（本版不动画质）
+
+实测 `getHttpVideoInfo.do`（《父母爱情》第1集真实 guid）：
+- 只有 `hls_url` 一个播放地址，**不存在** `hls_url_hd` / `_4k` 字段；
+- `manifest` 内 4 个 URL 是同一清晰度的不同 CDN/加密通道，均带 `maxbr=2048`，不是多档；
+- `video.chapters / chapters2 / 3 / 4` 是时长 300/180/120 秒的**分段标记**，其 `url` 全空，不是码率档。
+- 故「取更高清晰度」在接口层面无字段可用；又因目标机顶盒可流畅播放 4K，
+  **本版保持最高画质不动**：`maxbr=2048`、`_lockTopQuality()`、`capLevelToPlayerSize:false` 均未修改。
+
+### 三、改动 1：片库独立页面脚本 `js/cctvideo/app.js`（新增）
+
+由旧版 `js/home.js` 复制改造而来，`cctv.html` 改引它，**不再加载 `js/home.js`**。
+央视网的 `js/home.js` / `js/cctv/home.js` / `tv.html` 三个文件 md5 与改动前逐字节一致，零影响。
+
+遥控器行序按需求定为 **频道行 → 年代行 → 节目网格**，绑定关系：
+
+| 元素 | 上键 | 下键 |
+|---|---|---|
+| 频道按钮 | —（顶行） | `tvId(currentYear,'#yr-')` 当前选中年代 |
+| 年代按钮 | `tvId(currentChannel.tag,'#tv-')` 当前频道 | `moveDown(currentChannel.tag)` 即 `#tvd-{tag}:.tv-item` |
+| 节目格子 / 上（下）一页 | `tvId(currentYear,'#yr-')` 落到年代行（方案 A） | 网格内 ±5，越界由 `next()` 沿 DOM 兜底到翻页按钮 |
+
+- 删除空的 `filters` 行（该数组两版恒为空，从未渲染任何元素），
+  并移除旧版 `:move-up="'#fi-0'"` 这个指向不存在元素的硬编码 —— 它正是遥控器按上键失效的隐患。
+- 默认年代 `2025`，年代区间与分页逻辑沿用旧版 `cctvideo/home.js`（未改动）。
+
+### 四、改动 2：`js/myfocus.js` 补回 `rescueFocus()`（悬空救援）
+
+整树对齐后 `myfocus.js` 换成 gao 版，旧版专治「遥控器踩坑」的 `rescueFocus()` 丢失。
+（`applyFocus` 与 MutationObserver 兜底两版都有，差异仅此一处。）
+
+- 旧版：`getFocus()` 取不到时 → `rescueFocus()` 转移到当前可见频道的 上一页/下一页/首个节目；
+- gao 版：`getFocus()` 取不到时 → 返回 `null`，焦点丢失，遥控器失灵。
+
+**为什么正好卡住分页**：翻页时 `_assignPage` 重切片 → Vue 重渲染 → 旧「下一页」按钮被销毁重建，
+`curFocusId` 指向的元素消失 → 旧版救援接管、焦点续接；当前版返回 null 落到 `down()` 默认逻辑、焦点乱跳。
+
+修复方式保守：仅在**原有取焦点失败时**才介入，取到则完全不改变既有行为；
+救援失败再回落原 `found(this.focusId)`。三方共用（央视网/片库/栏目）均受益。
+
+### 五、校验
+
+- `node --check`：`cctvideo/app.js`、`myfocus.js`、`cctvideo/home.js` 全部通过；
+- 央视网基线 md5：`js/home.js`、`js/cctv/home.js`、`tv.html` 与改动前**完全一致**；
+- `tv.html` 仍指向 `js/home.js`，未被波及；
+- `_tvHtmlInit` 全局符号：由 `app.js` 定义、`cctvideo/home.js` 调用，一一对应无冲突。
+
+### 六、待实测
+
+1. 片库首屏是否出列表（重点：默认年代 2025-2026 数据量，若偏少需另议默认值）；
+2. 翻页 / 切年代 / 切频道时遥控器焦点是否连续不丢失；
+3. 回归央视网、CCTV 直播、央视栏目三个入口未被影响。
+
+回滚：`F:\github-dx\_backup_cctv-zl_20260917_1630\`（含 myfocus.js、cctv.html、home.js）。
+
+## v4.5.38 (2026-09-17) - 整树对齐 cctv-gao：Java 61 文件 + JS 注入链 15 脚本全量替换
+
+> 背景：连日来在本地链路上叠加了 13 个版本的修补（v4.5.25~v4.5.37），问题越修越多，
+> 而同源工程 **cctv-gao**（封版 v4.5.24，含 v4.5.25 流畅度优化）实测表现明显更好 ——
+> 同一批地方台 gao 脱壳成功率高、出画面快 3~5 秒。故决定不再逐点修补，
+> 改为**以 gao 为基线整树重建 zl 的播放链路**，只回补 zl 真正有价值的改动。
+>
+> 完整差异盘点见 `MIGRATION_TO_GAO.md`。
+
+### 一、可行性依据（先证明能换，再动手）
+
+| 检查项 | 结果 |
+|---|---|
+| X5/TBS 依赖 | 两工程**都无**，同为系统 WebView，内核基础一致 |
+| Java 文件 | 61 个**路径完全一致**，其中 32 个内容本就相同 |
+| `js/tv/` 站点目录 | 21 vs 21，**零差异**（推翻"站点脚本差异"的旧假设） |
+| 资源引用 | gao Java 引用的 `R.xxx` 在 zl res 中**全部存在** |
+| 按键桥接 | gao 也定义了 `keyCodeAllByCode` / `keyEventAll`，替换后不会编译失败 |
+
+### 二、已替换
+
+- **Java 层 61 个文件**整树替换为 gao 版
+- **JS 注入链 15 个脚本**：`load_detail_tv.js`、`load_detail_video.js`、`end.js`、`common.js`、
+  `home.js`、`myfocus.js`、`index.js`、`detailBase.js`、`cctvFullscreen.js`、`pageFsBtn.js`、
+  `pageToastKill.js`、`cctv/detail.js`、`cctv/home.js`、`tv/common/detail.js`、`tv/ysptv/detail.js`
+
+### 三、替换后自动获得的收益（这是本次的主要目的）
+
+1. **release 包不再常开调试** —— zl 原为 `setWebContentsDebuggingEnabled(true)` 硬编码，
+   gao 为 `BuildConfig.DEBUG`。**这是出画面慢 3~5 秒的实锤之一**
+2. **WebView 性能设置补齐** —— gao 有 `setSupportMultipleWindows(false)` /
+   `setOverScrollMode(OVER_SCROLL_NEVER)` / `setDefaultTextEncodingName("UTF-8")`，
+   zl **一处都没有**
+3. **模拟按键不再用 `Instrumentation`** —— gao 注释明确：原实现 `sendKeySync`
+   因普通应用无 `INJECT_EVENTS` 权限会直接抛异常，已改掉；zl 仍在用旧实现
+4. **地方台脱壳**：差异锁定在 `load_detail_tv.js` + `tv/common/detail.js`，一并解决
+
+### 四、有意回补的 zl 改动（唯一一项）
+
+`LiveActivity` 浮层 4 秒自清（`STALE_NAME_CLEAR_MS = 4000L`）：
+进度停滞超过 4 秒未到 100 就收起频道名，防「频道名 X%」永久压在画面上。
+gao 有 `setText("")` 但无定时自清，故保留 zl 这处兜底。
+
+清单里原本还有 2 项待定，复查后**查明是误判，无需回补**：
+- JS 弹窗：gao 同样有 `onJsAlert/onJsConfirm/onJsPrompt`，且 zl 那处 AlertDialog 是注释掉的死代码
+- 权限回调：gao 也有，用的是 `PermissionUtil.REQUEST_EXTERNAL_STORAGE`
+
+### 五、保持 zl 原版未动（已逐一验证）
+
+`cctv.html`（片库，zl 版多一行深蓝背景）/ `column.html`（栏目）/ `dsm.html`（支持我，**gao 无此文件**）/
+`js/cctv/tv.json`（频道更全）/ `js/xg/`（地方台 live.html 依赖）/ `js/cctvideo/`（片库栏目业务逻辑）
+`AndroidManifest.xml` / `res/` / `applicationId`（仍为 `com.daoxuan.cctv`）
+
+入口修正：`index.js` 第 5 入口由 gao 的 `kuxuan.html` 改回 `dsm.html`。
+
+### 六、有意保留的"未挂载"
+
+`js/pageTidy.js`（v4.5.37 顶部遮罩清理器）**文件保留，但不挂到加载链上** ——
+先得到一份纯净的 gao 行为作为对比基准；且该脚本实测"效果不明显"。
+需要时只需在两处链尾补挂载点即可恢复。
+
+### 七、校验与回滚
+
+- 物理备份：`F:\github-dx\_backup_cctv-zl_20260917_1438\`（171 文件 / 3.9M，含未提交改动）
+- Java 61 文件括号配平 ✅ / JS 15 脚本 `node --check` ✅
+- 片库兼容：gao 版提供的全局符号完整覆盖 zl 原版，**零丢失**
+
+### 八、实测重点
+
+1. 各省地方台脱壳率是否达到 gao 水平
+2. 出画面速度（预期明显变快，因 release 关调试 + WebView 设置补齐）
+3. **央视片库 / 央视栏目 / 支持我三个栏目的回归**（本次未动其业务逻辑，但共用库已换）
+4. CCTV直播入口的顶部遮罩 —— 注意 gao 该入口**同样有此问题**，预计会原样带过来，需单独治
+
+---
+
+## v4.5.37 (2026-09-17) - 起播瞬间「顶部一条半透明遮罩」1~2 秒后整体退去（站点播放器控件条残留）
+
+> **修订说明**：上一版 v4.5.36（未打包）在用户补充「似乎是整体退去，而非自下而上」后，
+> 自查发现三处实质漏洞，已整体重写，v4.5.36 作废：
+> 1. **只看 fixed/sticky** → 播放器控件几乎全是 `absolute`，几乎必漏；
+> 2. **只扫 body 两层** → 而央视17 之所以干净，靠的是 `cleanPage()` 的**全树扫描**；
+> 3. **用 display:none** → 触发重排、可能打断站点 JS，改为 `visibility/opacity/pointer-events` + `transition:none`。
+>
+> 另新排除一项：原生 ActionBar 一度重新回到嫌疑名单（顶部一条、整体消失），
+> 已确认 `BaseActivity` 里 `FEATURE_NO_TITLE` + `FLAG_FULLSCREEN` + `getActionBar().hide()`，
+> 所有 Activity 均继承它 —— **排除**。
+
+### 一、现象（道玄实测）
+
+除**央视网入口 → 央视17（走 tv.cctv.com）**外，其余全部命中：
+央视网入口的央视源2 / 卫视 / 各省地方台、CCTV直播入口（央视频）。
+表现为「计数器走完 → 视频起播 → 屏幕**顶部一条**（约 15vh，正压在台标那一行）被**半透明**遮罩 →
+约 1~2 秒后遮罩**整体退去**」——**只盖顶部一条**（不是整屏压暗）、**每次都有**。
+（初判「自下而上收缩」，经复核修正为「整体退去」；这一条直接决定了它是 opacity 淡出而非高度动画。）
+
+### 二、排除法：先证明不是「我们的页面脚本」干的
+
+| 嫌疑 | 结论 | 依据 |
+|---|---|---|
+| 原生 `loadingOverlay` | ❌ 排除 | 全屏 `#000`，且只有 `animate().alpha(0).setDuration(300)` 一次淡出，**没有位移/高度动画**，做不出「自下而上退」 |
+| 原生 `onShowCustomView` 容器 `binding.fullscreen` | ❌ 排除 | `match_parent` 全屏，且是 `#0A1F3A` 实色，不是「顶部一条」 |
+| `.tv-notify`（`_layer.notify`） | ❌ 排除 | 不透明绿 / `#1a56db` + **6vh 白色大字**，且 `close()` 是秒删无退场动画；截图里那条是**纯净压暗、无任何文字** |
+| `.tv-wait`（`_layer.wait`） | ❌ 排除 | `rgba(0,0,0,.5)` 但是 **100vw × 100vh 全屏**，不是一条 |
+| `end.js` | ❌ 排除 | 只有 CSS 与加载器，`createDiv` 是注释掉的，不造任何浮层 |
+
+**关键推论**：两条链（type=1 的 `load_detail_tv.js`、type=0 的 `load_detail_video.js`）
+的公共交集只有 `end.js + my.css + zepto + common.js` —— 而这四者里**根本不存在**
+「纯半透明、无文字、贴顶一条」的元素。所以这层东西**不是本工程造的**。
+
+### 三、定性：是站点播放器自己的顶部工具栏
+
+起播时浮现、两三秒后自动上滑隐藏 —— 这正是各视频站播放器顶部标题/工具栏的行为，
+也同时解释了「每次都出现」「1~2 秒后**从下往上**退去」「只盖顶部一条」。
+
+**为什么偏偏央视17 干净**：它走 `js/cctvFullscreen.js`，那里有一步 `cleanPage()`
+把页面残留元素整片清掉（只留 video 与它的容器链），站点工具栏根本没机会显示。
+另外那条链的 video z-index 是 `2147483647`，而其余链路的 `_tvFunc.fullscreen()`
+只给到 `99990` —— 站点条完全可能压在视频之上。
+
+### 四、修法：把 `cleanPage` 的思路通用化（新增 `js/pageTidy.js`）
+
+新增一个独立小脚本，**只做一件事**：起播后把「站点残留的顶部横条」摘掉。
+安全边界（宁可不生效，也不误伤）：
+
+1. **全树扫描**（与 `cleanPage()` 一致），并用 `MutationObserver(childList, subtree)`
+   收集后续新增节点 —— 播放器控件条常埋在 `body>div#app>div.player>div.bar` 这种深度；
+2. 跳过 `script/style/iframe` 等非可视标签，以及 `html/body` 自身；
+3. **绝不动** video 本身、含 video 的容器、以及 video 的整条祖先链（脱壳容器）；
+4. 只摘同时满足：`position` 非 static（含 **absolute**）+ 上沿贴顶（≤6px）+
+   高度 ≤35vh + 宽度 ≥半屏 —— 播放器本体、中央浮层、左侧菜单一律碰不到；
+5. 白名单放行画质菜单 **和本工程自己的浮层**：`.bei-list-inner` / `*quality*` / `*rates*` /
+   `*bitrate*` / `.tv-notify` / `.tv-text` / `.tv-wait` / `.notify-less` / `[id^="dxtv"]`。
+   其中 `.tv-notify` 是 `absolute; top:0; width:100%; height:10vh+2vh≈14vh`，
+   与实测遮罩高度几乎相同 —— **最容易被自己人误伤**，必须放行；
+6. 隐藏方式用 `visibility:hidden + opacity:0 + pointer-events:none + transition:none`，
+   元素留在文档流、站点 JS 照常跑，但视觉与交互同时失效；`transition:none` 掐掉淡出动画，
+   不留渐隐尾巴。已摘元素若被站点 JS 改回可见，会**立刻再压回去**（仅盯这少数几个）；
+7. 启动条件放宽到 `video.readyState>=2`（去掉 `currentTime>0.1`），起播瞬间即可命中；
+   前 2 秒 **80ms 密扫**、之后 300ms 疏扫，每 6 轮做一次全树复扫，合计约 6.2 秒窗口后自动停，
+   **不做常驻**（吸取 v4.5.30 的 `yspFullscreen` 90 秒常驻操作 DOM 被否的教训）；
+8. 顺带把 video 的 z-index 顶到 `2147483647`（与央视17 那条已验证链一致），
+   作为「站点条 z-index 更高」的第二道保险；
+9. 命中时 `console.warn` 打印元素的 tag/class/id/尺寸/position ——
+   万一实测仍有残留，抓 logcat 就能看到凶手真容，不用再猜。
+
+挂载点（三条，全部放在链尾，不参与也不阻塞原有顺序加载）：
+
+- `js/load_detail_tv.js` → `loadFromLocal()` 的 detail.js 回调内：`loadLocalJs("js/pageTidy.js")`
+- `js/load_detail_tv.js` → `loadFromRemote()`：`_tvLoadRes.js(.../js/pageTidy.js?v=x)`
+- `js/load_detail_video.js`：`_tvLoadRes.js(_browser.getURL("js/pageTidy.js?v=x"))`
+
+> 已核对 `shouldInterceptRequest`：任意 `*/tv-web/*.js` 都会走 `FileUtil.readExtIn` 打到本地 assets；
+> 本地链的 `_api.getJson` 对非 http 路径同样读 assets（`readExt("tv-web/"+url)`），新文件可取到。
+> 三个脚本 `node --check` 全部通过。
+
+### 五、约束复核
+
+- 央视17（`tv.cctv.com`）链路**一字未动** —— 它本来就是干净的，也是本次的对照样本；
+- 央视片库 `cctv.html` / 央视栏目 `column.html` **未动**；
+- 单一变量、可整文件回滚：出问题只需删掉上面三个挂载点（或把 `js/pageTidy.js` 改名）即恢复原状。
+
+### 六、待实测
+
+重点看：央视网入口的央视源2 / 卫视 / 各省地方台，以及 CCTV直播入口，
+起播后顶部那 1~2 秒的遮罩是否消失；同时回归确认脱壳率与切台未受影响。
+
+---
+
 ## v4.5.35 (2026-09-17) - 战场清点：v4.5.34「早注入」已实测证伪，并定位到 3 处真实差异（待明日验证）
 
 > 状态说明：**本节不含代码改动**。今晚 00:22 打的包用户实测「地方台依旧 90%+ 不脱壳」，

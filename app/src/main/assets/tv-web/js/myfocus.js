@@ -1,14 +1,11 @@
 let TvFocus={
     curFocusId:null,
+    focusId:".tv-focus",
     focusClass:"tv-focus",
     menuId: null,
     model:{
         event:{}
     },
-   /* constructor(menuId) {
-        this.menuId=menuId;
-        console.log("constructor menuId",menuId)
-    }*/
     init(menuId){
         this.menuId=menuId;
         this.menuCtrl();
@@ -19,10 +16,8 @@ let TvFocus={
         let _this=this;
         window._menuCtrl={
             menu(){
-                //_this.keyMenuEvent();
                 _this.menu();
                 let data = _detailData();
-                //console.log("menu",data);
                 _apiX.message("menu",data);
             },
             ok(){
@@ -147,7 +142,6 @@ let TvFocus={
         }
     },
     keyRightEvent() {
-        console.log("keyRightEvent");
         let focus=this.getFocus();
         if(null==focus){
             this.right();
@@ -167,32 +161,29 @@ let TvFocus={
     },
     getFocus(){
         let el = this.curFocusId ? $$("#"+this.curFocusId) : null;
-        if(el && el.length>0){
-            return el;
-        }
-        // 悬空救援：curFocusId 指向的元素已不存在 → 转移至当前可见频道的分页/列表元素
-        return this.rescueFocus();
+        if(el && el.length>0){ return el; }
+        let rescued = this.rescueFocus();
+        if(rescued && rescued.length>0){ return rescued; }
+        return this.found(this.focusId);
     },
+    // 悬空救援：curFocusId 指向的元素已被重渲染销毁（翻页 / 切年代 / 切频道后常见），
+    // 转移到当前可见频道的分页按钮或首个节目，避免焦点丢失导致遥控器失灵。
+    // 仅在原有取焦点失败时才介入，取到则完全不改变既有行为。
     rescueFocus(){
         let contents = document.querySelectorAll(".tv-content");
         let box = null;
         for(let i=0;i<contents.length;i++){
-            if(contents[i].style.display !== "none"){
-                box = contents[i];
-                break;
-            }
+            if(contents[i].style.display !== "none"){ box = contents[i]; break; }
         }
-        if(box){
-            let el = box.querySelector(".tv-prev") || box.querySelector(".tv-next") || box.querySelector(".tv-item");
-            if(el && el.id){
-                this.curFocusId = el.id;
-                this.applyFocus(el.id);
-                return $$("#"+el.id);
-            }
+        if(!box){ return null; }
+        let el = box.querySelector(".tv-prev") || box.querySelector(".tv-next") || box.querySelector(".tv-item");
+        if(el && el.id){
+            this.curFocusId = el.id;
+            this.applyFocus(el.id);
+            return $$("#"+el.id);
         }
         return null;
     },
-    // TvFocus 独占 tv-focus 类：全局仅一个框，直接增删，不依赖 Vue :class（根治 Vue 重渲染抢类）
     applyFocus(id){
         if(!id){ return; }
         $$(".tv-focus").removeClass("tv-focus");
@@ -200,7 +191,6 @@ let TvFocus={
         if(el && el.length>0){ el.addClass("tv-focus"); }
         this.curFocusId = id;
     },
-    // MutationObserver 兜底：Vue 重渲染会重置 className 抹掉手动加的 tv-focus，此处侦测并补回，确保全局仅一个焦点框
     observe(){
         let _this=this;
         this._focusObserver = new MutationObserver(function(){
@@ -219,7 +209,6 @@ let TvFocus={
         this._focusObserver.observe(document.body, {childList:true, subtree:true, attributes:true, attributeFilter:["class"]});
     },
     keyLeftEvent() {
-        console.log("keyLeftEvent");
         let focus=this.getFocus();
         if(null==focus){
             this.left();
@@ -231,13 +220,11 @@ let TvFocus={
         let idPre=elem.attr("move-updown-id");
         if(idPre){
             let nowId=elem.attr("id").substring(idPre.length);
-            console.log("foundId nowId::"+nowId);
             let newNum=Number(nowId)-Number(num);
             if(down){
                 newNum=Number(nowId)+Number(num);
             }
             let foundId=idPre+newNum;
-            console.log("foundId::"+foundId);
             if(null!=document.getElementById(foundId)){
                 return $$("#"+foundId);
             }else{
@@ -245,7 +232,6 @@ let TvFocus={
                     var moveUp= elem.attr("move-up");
                     return $$(moveUp);
                 }
-                return null;   // 下行目标不存在：返回 null，交 next() 兜底遍历 DOM 到"下一页"
             }
 
             return elem;
@@ -257,7 +243,6 @@ let TvFocus={
         if(null!=newElem){
              return newElem;
         }
-        //var elem= $$(this.focusId);
         for(var i=0;i<num;i++){
             if(elem.next()&&elem.next().length>0){
                 elem=elem.next();
@@ -298,13 +283,11 @@ let TvFocus={
         );
       },
     scrollIntoView(el) {
-        // 找到可滚动的父容器
         var parent = el.parentElement;
         var isHeader = el.closest('.tv-header') !== null;
 
         if (isHeader) {
             parent = el.closest('.tv-header');
-            // 轻微延迟以确保DOM更新
             setTimeout(() => {
                 document.body.scrollTop = 0;
                 document.documentElement.scrollTop = 0;
@@ -319,7 +302,6 @@ let TvFocus={
             return;
         }
 
-        // 查找最近的可滚动容器
         while (parent) {
             var style = window.getComputedStyle(parent);
             var overflow = style.getPropertyValue('overflow');
@@ -333,7 +315,6 @@ let TvFocus={
             parent = parent.parentElement;
         }
 
-        // 如果没找到可滚动容器，使用document.scrollingElement
         if (!parent) {
             parent = document.scrollingElement || document.documentElement;
         }
@@ -342,32 +323,26 @@ let TvFocus={
         var viewportHeight = window.innerHeight;
         var viewportWidth = window.innerWidth;
 
-        // 使用 requestAnimationFrame 确保平滑滚动
         requestAnimationFrame(() => {
-            // 计算垂直滚动
             if (elementRect.bottom > viewportHeight) {
-                // 向下滚动时，确保元素完全可见
                 var scrollOffset = elementRect.bottom - viewportHeight + 20;
                 parent.scrollTop += scrollOffset;
             } else if (elementRect.top < 0) {
-                // 向上滚动时，确保元素完全可见
                 parent.scrollTop += elementRect.top - 20;
             }
 
-            // 计算水平滚动
             if (elementRect.right > viewportWidth) {
                 parent.scrollLeft += elementRect.right - viewportWidth + 40;
             } else if (elementRect.left < 0) {
                 parent.scrollLeft = Math.max(0, parent.scrollLeft + elementRect.left - 40);
             }
 
-            // 强制重绘以防止白屏
             parent.style.transform = 'translateZ(0)';
         });
     },
     scrollTo: function() {
-        var el = this.curFocusId ? document.querySelector("#"+this.curFocusId) : null;
-        if (!el) return; // 防止元素不存在时的错误
+        var el = document.querySelector(this.focusId);
+        if (!el) return;
         
         var flag = this.isElementInViewport(el);
         if (!flag) {
@@ -377,7 +352,6 @@ let TvFocus={
         }
     },
     keyOkEvent() {
-        console.log("点击了确认键");
         let focus=this.getFocus();
         if(null==focus){
             this.ok();
@@ -387,47 +361,28 @@ let TvFocus={
     },
     keyBackEvent(){
         if(_layer.isShow(this.menuId)){
-            //menu
             _layer.hide(this.menuId);
-            return;
+        }else{
+            window.location.href= this.backUrl();
         }
-        /* [v4.5.27] App 内禁止「页面级返回首页」。
-           本工程是全工程唯一一处会把 WebView 导航回首页的 JS：
-               window.location.href = _browser.getURL("index.html")
-           它由 _menuCtrl.back() 以及 keyCode 81(=Q) 直接触发，不需要任何用户意图。
-           一旦触发，页面会自己跳回 index.html，而跳转前挂上的等待层
-           （「等待跳转...」/「正在跳转到 XXX 」）就留在首页上，遥控焦点也跟着失效
-           —— 实测 CCTV 直播入口：计数器走完 → 黑屏 → 自动退回首页 → 遮罩卡死。
-           App 里返回键本来就归原生 Activity 统一处理
-           （MainActivity.keyBack → WebView.goBack），不需要 JS 再跳一次。
-           只有无原生壳的浏览器/Gecko 环境才保留跳首页兜底。 */
-        try{
-            if(_tvFunc && _tvFunc.isApp && _tvFunc.isApp()){
-                return;
-            }
-        }catch(e){}
-        window.location.href= this.backUrl();
     },
     backUrl(){
         return _browser.getURL("index.html");
     },
     keyMenuEvent(){
-        console.log("keyMenuEvent");
         this.isShow= _layer.toggle(_tv_menuId);
         if(!this.isShow){
             this.focus=null;
             _apiX.msgStr("menuShow","0");
         }else{
             this.menu();
-            this.focus=this.curFocusId ? $$("#"+this.curFocusId) : null;
+            this.focus=this.found(this.focusId);
             _apiX.msgStr("menuShow","1");
         }
     },
     focusEvent(){
-        console.log("focusEvent ");
         let focus=this.getFocus();
         if(null!=focus){
-            console.log("focusEvent focus");
             focus.trigger("focus");
         }
     },
@@ -441,16 +396,8 @@ let TvFocus={
             KeyS=83,
             KeyR=82
         let _this=this;
-        console.log("initKeyEvent....")
         document.addEventListener("keydown",function(e){
-       // .onkeydown = function (e) {
             var keyCode=e.keyCode;
-           // console.log(e.keyCode);
-           // if(!e.code){ keyCode=e.keyCode;}
-            /* [v4.5.27] 补回遥控器键码：本工程此前只认电脑键盘 W/A/S/D/Q/R，
-               遥控器的 19/38(上) 20/40(下) 21/37(左) 22/39(右) 23/66(确定)
-               一个都没绑（cctv-gao 是两组都认）。机顶盒上方向键全落空，
-               所以这里对齐 cctv-gao：两组键码并存，谁到算谁。 */
             switch (keyCode) {
                 case 19:
                 case 38:
@@ -467,7 +414,7 @@ let TvFocus={
                 case KeyA:
                     _this.keyLeftEvent()
                     break
-                case 4: /*ipannel*/
+                case 4:
                 case 22:
                 case 39:
                 case KeyD:

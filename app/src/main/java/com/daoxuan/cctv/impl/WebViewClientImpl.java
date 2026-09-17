@@ -96,14 +96,6 @@ public class WebViewClientImpl extends WebViewClient {
         }
     }
 
-    /**
-     * 自愈用：脱壳脚本的注入闸门 _tvload（定义在 assets/tv-web/js/load_detail_tv.js）。
-     * 若上一次注入是在 DOM 未就绪时半途中断的（连带 end.js 的 _tvLoadRes 都没定义出来），
-     * 说明闸门属于「假置位」——放行重来，否则脱壳脚本永远不再加载。
-     */
-    private static final String RESET_STALE_TVLOAD_JS =
-            "(function(){try{if(window._tvload&&!window._tvLoadRes){window._tvload=false;}}catch(e){}})()";
-
     private static  String lastUrl=null;
     private static  String rootUrl=null;
     private static  String currentUrl=null;
@@ -133,29 +125,8 @@ public class WebViewClientImpl extends WebViewClient {
     public void onPageStarted(WebView view, String url, Bitmap favicon) {
         notifyStarted(url);
         currentUrl=url;
-        /* [v4.5.34] 恢复早注入 —— 对齐 cctv-gao（实测 gao 各省地方台 90%+ 成功脱壳，
-           而本工程 90%+ 不脱壳；两者在地方台链路上唯一的结构性差异就是这段早注入）。
-
-           为什么 v4.5.26 曾把它删掉：当时 js/end.js 没有 DOM 兜底，onPageStarted 时
-           <head> 刚解析、<body> 通常还不存在，appendChild 抛异常中断整段脚本，
-           而 load_detail_tv.js 的 _tvload=true 却已落地（假置位），
-           导致 onPageFinished 的正常注入被闸门挡成空转 —— yangshipin 整条链失效。
-
-           为什么现在可以恢复：js/end.js 在 v4.5.26 当次已补齐 DOM 兜底
-           （loadCssCode 加 try-catch 与 head 判空、createDiv 用 body||documentElement、
-           _tvLoadRes.js/css 全部加 host 判空），「早注入必抛异常」的前提已不成立。
-
-           三重保险，任何一环失败都不影响最终脱壳：
-             1) 注入前先跑 RESET_STALE_TVLOAD_JS 清假置位（该常量此前定义了却从未被调用）；
-             2) 整段包 try-catch，异常不影响后续 onPageFinished；
-             3) onPageFinished 注入前同样先跑自愈，早注入半途失败仍可补救。
-
-           作用域：type==1 且非 tv.cctv.com 的页面（即各省地方台）。
-           显式排除 yangshipin.cn：它在 v4.5.31 已改走 CCTV直播入口那条已验证的链、
-           实测正常，不纳入早注入，避免把已验收的链路拖下水。 */
-        if (type == 1 && !url.contains("tv.cctv.com") && !url.contains("yangshipin.cn")) {
-            try {
-                view.evaluateJavascript(RESET_STALE_TVLOAD_JS, null);
+        try {
+            if (type == 1 && !url.contains("tv.cctv.com")) {
                 String earlyJs = getFileContent(url);
                 if (null != earlyJs && !earlyJs.isEmpty()) {
                     view.evaluateJavascript(earlyJs, new ValueCallback<String>() {
@@ -164,9 +135,9 @@ public class WebViewClientImpl extends WebViewClient {
                         }
                     });
                 }
-            } catch (Exception e) {
-                LogUtil.e(TAG, "early inject error: " + e.getMessage());
             }
+        } catch (Exception e) {
+            LogUtil.e(TAG, "early inject error: " + e.getMessage());
         }
         String baseFolder = "tv-web/";
         if(url.contains("tv-web")){
@@ -185,25 +156,7 @@ public class WebViewClientImpl extends WebViewClient {
         }
         if (sEndJs == null) { sEndJs = assetText("js/end.js"); }
         String detail;
-        /* [v4.5.31] 央视频（央视源2 / 卫视 / 教育）在央视网入口（LiveActivity, type=1）
-           原本走 load_detail_tv.js → js/tv/ysptv/detail.js，实测「计时器走完、未脱壳、
-           视频在骨架窗口播放」。而同一个站点在 CCTV直播入口（type=0，走
-           load_detail_video.js → js/cctv/detail.js）实测正常播放。
-
-           两者访问的是同一类页面（yangshipin.cn/tv/home?pid=...），差别只在承载的
-           Activity 与随之而来的注入链。故这里让央视频在 LiveActivity 里直接复用
-           CCTV直播入口那条已验证可用的链：同一个加载器、同一种资源加载方式
-           （_tvLoadRes + 外链 script src）、同一套脚本。
-
-           这与 v4.5.28 不同：v4.5.28 只把目标文件换成 js/cctv/detail.js，却仍保留
-           load_detail_tv.js 那套「原生桥 getJson + 内联 script」的加载机制，
-           机制本身未变，故实测仍失败。本次是整条链一起换。
-
-           作用域仅限 yangshipin.cn，其余站点（tv.cctv.com 与各地方台）行为不变。 */
-        if(type==1 && url.startsWith("https://www.yangshipin.cn")){
-            if (sLoadDetailVideoJs == null) { sLoadDetailVideoJs = assetText("js/load_detail_video.js"); }
-            detail = sLoadDetailVideoJs;
-        } else if(type==1){
+        if(type==1){
             if (sLoadDetailTvJs == null) { sLoadDetailTvJs = assetText("js/load_detail_tv.js"); }
             detail = sLoadDetailTvJs;
         } else {
@@ -219,58 +172,23 @@ public class WebViewClientImpl extends WebViewClient {
             injectCctvFullscreenPipeline(view);
             return;
         }
-        /* 央视频（yangshipin.cn）播放器自带的「全力加载中…」气泡需要压掉，
-           故注入 pageToastKill（脚本自带幂等保护，重复注入无副作用）。
-           [v4.5.31] 这里不再注入 v4.5.30 的 yspFullscreen 兜底器：它属于未被证实的
-           猜测性改动，且会持续 90 秒操作 DOM，与站点自身渲染互相拉锯。
-           央视频在央视网入口改由 getFileContent 直接复用 CCTV直播入口那条已验证的链解决。 */
+        /* CCTV 直播入口走的是央视频（yangshipin.cn）：它不需要脱壳，但播放器自己的
+           「全力加载中…」气泡要压掉。这里只注「气泡压制器」pageToastKill，不注脱壳脚本，
+           也绝不影响上面 tv.cctv.com 的 4 个入口（它们 v4.5.16 已验证正常，不应再背扫描开销）。 */
         if (url.contains("yangshipin.cn")) {
-            final String toastKill = pageToastKillJs();
+            String toastKill = pageToastKillJs();
             injectToastKiller(view, toastKill);
+            final String tk2 = toastKill;
             view.postDelayed(new Runnable() {
                 @Override
-                public void run() {
-                    injectToastKiller(view, toastKill);
-                }
+                public void run() { injectToastKiller(view, tk2); }
             }, 350);
         }
-        final String fileContent = getFileContent(url);
-        if (null == fileContent) {
-            return;
-        }
-        /* [v4.5.31] 注入门禁按 type 分域，避免相互牵连：
-
-           type==1（央视网入口 LiveActivity）：解除进度门禁。
-           yangshipin 等第三方直播页常驻 HLS 分片与心跳长连接，WebView 进度会长期停在
-           60~90%（实测三张截图恰好是 70/70/10），若坚持等 100 则脱壳脚本永不注入，
-           页面保持裸奔，LiveActivity 的「频道名 X%」也永远等不到 100。
-           onPageFinished 本身即代表主文档已就绪，故直接注入；未走完再补一次。
-
-           type==0（CCTV直播入口 MainActivity）：完整保留 v4.5.27 的原始门禁
-           （仅 progress==100 时注入）。该入口在 v4.5.27 实测正常，这里不做任何行为改变，
-           以免把已验收的链路拖下水。 */
-        if (type == 1) {
-            /* [v4.5.34] 注入前先清「假置位」：若早注入是在 DOM 未就绪时半途中断的，
-               _tvload 已为 true 但 _tvLoadRes 未定义（end.js 没跑完）——
-               此时必须放行重来，否则本次注入会被 _tvload 闸门挡成空转，
-               脱壳脚本永远不再加载，页面保持裸奔。 */
-            view.evaluateJavascript(RESET_STALE_TVLOAD_JS, null);
-            view.evaluateJavascript(fileContent, new ValueCallback<String>() {
-                @Override
-                public void onReceiveValue(String s) {
-                }
-            });
-            if (mWebView.getProgress() != 100) {
-                view.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        try { view.evaluateJavascript(fileContent, null); } catch (Exception ignore) {}
-                    }
-                }, 500);
-            }
-            return;
-        }
         if (mWebView.getProgress() == 100) {
+            String fileContent =getFileContent(url);
+            if(null==fileContent){
+                return;
+            }
             view.evaluateJavascript(fileContent, new ValueCallback<String>() {
                 @Override
                 public void onReceiveValue(String s) {

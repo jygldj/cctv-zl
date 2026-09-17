@@ -27,23 +27,6 @@ public class ConfigApi {
             configCallback.getConfig(configDTO1);
         }).start();
     }
-    private static String firstUpX5Ok ="";
-    public static void  syncIsX5Ok(Context context){
-       String isX5Ok= ValueUtil.getString(context,"x5");
-       //String firstUpX5Ok= ValueUtil.getString(context,"firstUpX5Ok");
-       if(isX5Ok.equals("ok")&&"".equals(firstUpX5Ok)){
-            new Thread(()->{
-                String androidId= MyApplication.androidId;
-                String reqUrl =updateUrl+"?isOk=1&id="+androidId;
-                LogUtil.i("isOk getConfig","reqUrl "+reqUrl);
-                HttpUtil.getJson(reqUrl,new HashMap<>());
-                firstUpX5Ok="1";
-               //ValueUtil.putString(context,"firstUpX5Ok","1");
-            }).start();
-       }
-    }
-
-
     public static ConfigDTO getConfig(){
         if(null!=configDTO&&System.currentTimeMillis()-lastTime<1000*60*60*24){
             return configDTO;

@@ -24,10 +24,7 @@ public class FavoriteService {
         return instance;
     }
 
-    /**
-     * 添加收藏
-     * @param vod 要收藏的频道
-     */
+
     public void addFavorite(Vod vod) {
         Favorite favorite = new Favorite();
         //favorite.setVodKey(vod.getKey());
@@ -49,29 +46,19 @@ public class FavoriteService {
         return favUrl(url);
     }
 
-    /**
-     * 取消收藏
-     * @param vodUrl 频道key
-     */
+
     public void removeFavorite(String vodUrl) {
         vodUrl=checkFavUrl(vodUrl);
         db.favoriteDao().deleteFavoriteByVodUrl(vodUrl);
     }
 
-    /**
-     * 检查是否已收藏
-     * @param vodUrl 频道URL
-     * @return true if favorited, false otherwise
-     */
+
     public boolean isFavorite(String vodUrl) {
         vodUrl=checkFavUrl(vodUrl);
         return db.favoriteDao().isFavorite(vodUrl) > 0;
     }
 
-    /**
-     * 获取所有收藏
-     * @return 收藏列表
-     */
+
     public List<Favorite> getAllFavorites() {
         return db.favoriteDao().getAllFavorites();
     }
