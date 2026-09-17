@@ -1,4 +1,4 @@
-# 道玄电视 Android 项目（android-x5）
+# 道玄电视 Android 项目（cctv-zl）
 
 ## 项目简介
 基于腾讯 X5（TBS）内核的 Android TV 应用，使用 Java 开发，采用 DataBinding 架构。
@@ -99,7 +99,7 @@ app/src/main/
 2. **横屏强制**：所有 Activity 锁定横屏
 3. **SingleTask**：主 Activity `singleTask` 防重复创建
 4. **焦点处理**：TV 应用务必保证遥控器导航
-5. **资源备份**：`res/` 内禁止保留下划线前缀目录（如 `_backup_*`），AAPT 虽忽略但污染构建；备份统一迁至工程外 `F:/github-dx/_backup_android-x5_*/`
+5. **资源备份**：`res/` 内禁止保留下划线前缀目录（如 `_backup_*`），AAPT 虽忽略但污染构建；备份统一迁至工程外 `F:/github-dx/_backup_cctv-zl_*/`
 6. **启动/退出抢镜修复**：`index.html` 内联 `.tv-tab{display:none}` 兜底，Vue 接管前隐藏全部频道区块，根治 PetiteVue 异步挂载空窗期「随喜/太极」闪现与退出弹窗透出。勿删此规则。
 
 ## 打包产物命名

@@ -19,12 +19,10 @@ import com.daoxuan.cctv.util.FileUtil;
 import com.daoxuan.cctv.util.JsonUtil;
 
 /**
- * 本地电视数据层（由 cctv-gao 同构收敛而来）。
+ * 本地电视数据层。
  *
- * 原 android-x5 版本身兼两职：既是本地数据层，又带「远程 tv-web.zip 下载 + 自更新」。
- * 本次「去除更新」后，远程下载/在线版本校验已全部移除，只保留：
- *   ① initBaseFolder —— 只初始化资源根目录（不再每次启动把 assets/tv-web 全量拷贝到私有目录；
- *      FileUtil.readExtIn 本就优先读 assets，找不到才回落私有目录，所以这次拷贝是多余的）；
+ * 职责：
+ *   ① initBaseFolder —— 初始化资源根目录；
  *   ② 本地电视数据的读取与导航（initTvData / getByKey / getByUrl / liveNext / getByLivesWithFavorites）。
  */
 public class UpdateService {

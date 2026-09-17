@@ -438,10 +438,8 @@ public class BaseWebViewActivity extends BaseActivity {
     /**
      * 连续这么多次探测不到 video 元素，就认定不是播放页（央视栏目/列表页），别再干等。
      *
-     * 原为 5 次 × 300ms = 1.5s；v4.5.12 把轮询间隔缩到 150ms 时没同步改这个次数，
-     * 判定窗口被顺带砍到 0.75s，实测正好卡在「专辑页 → 播放页」自动跳转的空档上——
-     * 遮罩先收、跳转未发生，裸骨架露 1~2 秒。
-     * 现按 24 次 × 150ms ≈ 3.6s 计：足以覆盖一次自动跳转，又不至于把真正的列表页挡死。
+     * 按 24 次 × 150ms ≈ 3.6s 计：足以覆盖一次「专辑页 → 播放页」的自动跳转，
+     * 又不至于把真正的列表页挡死。窗口若太短，会遮罩先收、跳转未发生，裸骨架露 1~2 秒。
      */
     private static final int FS_NOVIDEO_MAX = 24;
 
@@ -906,8 +904,8 @@ public class BaseWebViewActivity extends BaseActivity {
     protected void onPageLoadFinished(String url) {
         cancelPendingShow();
         if (sessionActive && isVideoPage(url)) {
-            /* 会话进行中：专辑页也好、播放页也好，都不收罩。
-               原先是「这一页加载完就收、下一段再弹」，中间的空档正是实测看到的裸骨架。 */
+            /* 会话进行中：专辑页也好、播放页也好，都不收罩——
+               否则「这一页收、下一段再弹」的空档会露出裸骨架。 */
             if (overlayShownAt <= 0) { showLoadingOverlay(); }
             startFsPoll();
             return;

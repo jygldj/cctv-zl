@@ -1,23 +1,30 @@
 *.apk
+*.aab
 *.iml
 .gradle
-# 密钥库文件（敏感信息）
+.kotlin
+
+# 密钥库与签名配置（敏感信息，绝不入库）
 /keystore/
 *.jks
 *.keystore
+keystore.properties
+
+# 本机环境
+/local.properties
+local.properties
+.DS_Store
+
+# IDE（Android Studio 配置随机器变化，整体忽略）
+/.idea/
+
+# 构建产物
+/build
+/app/build/
 /app/release
 /app/debug
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
 /captures
+/captures/
 .externalNativeBuild
 .cxx
-local.properties
-/app/build/
+*.hprof
