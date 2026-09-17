@@ -36,18 +36,15 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import com.daoxuan.cctv.call.StringCallback;
 import com.daoxuan.cctv.dao.HistoryDaoX;
 import com.daoxuan.cctv.databinding.ActivityLiveBinding;
 import com.daoxuan.cctv.databinding.ItemHzLiveBinding;
 import com.daoxuan.cctv.domain.HzItem;
 import com.daoxuan.cctv.databinding.DialogExitBinding;
-import com.daoxuan.cctv.domain.live.DataWrapper;
 import com.daoxuan.cctv.impl.BaseBindingAdapter;
 import com.daoxuan.cctv.impl.BaseViewHolder;
 import com.daoxuan.cctv.domain.live.Live;

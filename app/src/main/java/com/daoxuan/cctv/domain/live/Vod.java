@@ -1,8 +1,6 @@
 package com.daoxuan.cctv.domain.live;
 
-import android.util.Pair;
 
-import java.util.List;
 
 public class Vod {
    private String name;

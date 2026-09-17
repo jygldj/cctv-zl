@@ -60,16 +60,12 @@ const _html = {
             },
             appChoose(item) {
                 let dataUrl = item.url;
-                if (_utao_version && (_utao_version === "{version}" || _utao_version <= 20)) {
-                    _layer.wait("等待跳转...");
-                    window.location.href = dataUrl;
-                    return;
-                }
                 if (dataUrl === "tv.html") {
                     _apiX.msgStr("activity", "live");
                     return;
                 }
-                _layer.wait("等待跳转...");
+                /* 起跳前不弹 JS 浮层：原生在 onPageStarted 即接管（命中 isVideoPage 才显示计时遮罩），
+                   多一层浮层只会先闪 0.2~1 秒再被原生盖掉，反而更乱。 */
                 window.location.href = dataUrl;
             },
             tvId(value, pre) {
