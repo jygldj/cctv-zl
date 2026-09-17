@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>感谢您的支持</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: #0a1f3a;
+            color: #FFD700; /* 金黄色文字 */
+            font-family: 'Microsoft YaHei', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .container {
+            max-width: 800px;
+            width: 100%;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+        
+        /* 打赏码（移植自移步随喜.html 金边玻璃面板样式） */
+        .qrcode-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .qrcode-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(255, 215, 0, 0.1);
+            border: 1px solid #FFD700;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .qrcode-img {
+            width: 140px;
+            height: 140px;
+            object-fit: contain;
+            background-color: #fff;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .qrcode-title {
+            margin-top: 8px;
+            color: #FFD700;
+            font-size: 0.95rem;
+            font-weight: normal;
+        }
+        
+        .thank-you {
+            font-size: 1.5rem;
+            margin-top: 30px;
+            font-style: italic;
+        }
+        
+        /* 触屏返回入口：无 tabindex，机顶盒 DPAD 不可聚焦，故进不了火锅页 */
+        .back-link {
+            margin-top: 30px;
+            font-size: 1.1rem;
+            color: #FFD700;
+            cursor: pointer;
+            text-decoration: underline;
+            opacity: 0.85;
+        }
+        .back-link:hover { opacity: 1; }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+            
+            p {
+                font-size: 1rem;
+            }
+            
+            .qrcode-img {
+                width: 150px;
+                height: 150px;
+            }
+            
+            .qrcode-title {
+                font-size: 1.1rem;
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            /* 电视大屏幕优化 */
+            h1 {
+                font-size: 3rem;
+            }
+            
+            p {
+                font-size: 1.5rem;
+            }
+            
+            .qrcode-img {
+                width: 250px;
+                height: 250px;
+            }
+            
+            .qrcode-title {
+                font-size: 1.5rem;
+            }
+            
+            .thank-you {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>感谢您的支持</h1>
+        <p>如果您喜欢我的内容，可以通过以下方式打赏支持。您的每一份心意都是我继续创作的动力！</p>
+        
+        <div class="qrcode-container">
+            <div class="qrcode-item">
+                <img src="img/wx.png"  alt="微信收款二维码" class="qrcode-img" tabindex="0">
+                <div class="qrcode-title">欢喜结缘·微信</div>
+            </div>
+            
+            <div class="qrcode-item">
+                <img src="img/zfb.png"  alt="支付宝收款二维码" class="qrcode-img" tabindex="0">
+                <div class="qrcode-title">随缘乐助·支付宝</div>
+            </div>
+        </div>
+        
+        <div class="thank-you">衷心感谢您的支持！</div>
+        <div class="back-link" onclick="location.href='kuxuan.html'">← 返回火锅页</div>
+    </div>
+    
+</body>
+</html>
