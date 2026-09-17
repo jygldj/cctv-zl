@@ -3,9 +3,12 @@ package com.daoxuan.cctv.dao;
 import android.content.Context;
 
 import java.util.Date;
+import java.util.List;
 
+import com.daoxuan.cctv.call.StringCallback;
 import com.daoxuan.cctv.domain.live.Vod;
 import com.daoxuan.cctv.service.UpdateService;
+import com.daoxuan.cctv.util.JsonUtil;
 import com.daoxuan.cctv.util.LogUtil;
 
 public class HistoryDaoX {

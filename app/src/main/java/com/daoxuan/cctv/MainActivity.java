@@ -1,9 +1,12 @@
 package com.daoxuan.cctv;
 
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.Button;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.databinding.DataBindingUtil;

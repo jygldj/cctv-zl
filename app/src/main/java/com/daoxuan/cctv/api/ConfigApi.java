@@ -1,5 +1,6 @@
 package com.daoxuan.cctv.api;
 
+import android.content.Context;
 import android.os.Build;
 
 import java.text.MessageFormat;
@@ -13,6 +14,7 @@ import com.daoxuan.cctv.util.HttpUtil;
 import com.daoxuan.cctv.util.JsonUtil;
 import com.daoxuan.cctv.util.LogUtil;
 import com.daoxuan.cctv.util.Util;
+import com.daoxuan.cctv.util.ValueUtil;
 
 public class ConfigApi {
     public static final String  apiHost="http://api.vonchange.com";

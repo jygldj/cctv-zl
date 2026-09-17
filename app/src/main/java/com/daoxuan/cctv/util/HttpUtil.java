@@ -1,5 +1,6 @@
 package com.daoxuan.cctv.util;
 
+import android.util.Log;
 
 import org.jetbrains.annotations.NotNull;
 

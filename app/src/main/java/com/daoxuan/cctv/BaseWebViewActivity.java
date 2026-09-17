@@ -1,5 +1,7 @@
 package com.daoxuan.cctv;
 
+import android.app.ActivityManager;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Build;
@@ -26,16 +28,21 @@ import android.webkit.WebView;
 
 import com.google.gson.reflect.TypeToken;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import com.daoxuan.cctv.api.ConfigApi;
+import com.daoxuan.cctv.call.DownloadCallback;
+import com.daoxuan.cctv.call.StringCallback;
 import com.daoxuan.cctv.databinding.ActivityMainBinding;
 import com.daoxuan.cctv.databinding.ItemHzBinding;
 import com.daoxuan.cctv.databinding.ItemJdBinding;
 import com.daoxuan.cctv.databinding.ItemRateBinding;
 import com.daoxuan.cctv.databinding.ItemXjBinding;
+import com.daoxuan.cctv.domain.ApkInfo;
 import com.daoxuan.cctv.domain.ConfigDTO;
 import com.daoxuan.cctv.domain.DetailMenu;
 import com.daoxuan.cctv.domain.HzItem;
@@ -137,8 +144,8 @@ public class BaseWebViewActivity extends BaseActivity {
     protected void initWebChromeClient() {
         mWebView.setWebChromeClient(new WebChromeClient() {
             /* 取消 WebView 自带的视频默认海报（灰底 + 大播放图标）。
-               它由 WebView 在起播前直接画在视频区域，不属于页面 DOM，
-               因此页面样式与播放器配置都管不到，只能在原生层替换。 */
+               这不是页面 CSS 能盖住的东西：它由 WebView 在起播前直接画在视频区域，
+               所以此前 xgplayer 侧怎么调都没有效果。返回透明位图即可，见字段注释。 */
             @Override
             public Bitmap getDefaultVideoPoster() {
                 return TRANSPARENT_VIDEO_POSTER;
@@ -423,7 +430,10 @@ public class BaseWebViewActivity extends BaseActivity {
 
     /**
      * 遮罩收起时的防抖：显示了就别一闪而过，至少留住 MIN_SHOW。
-     * 只有「收起」这一半需要防抖——显示时机由 onPageLoadStarted 的白名单直接决定，不设延迟。
+     *
+     * 原先还有配对的 SHOW_DELAY（延后 260ms 才显示），用于避免本地页「刚盖就加载完、
+     * 遮罩一闪」。v4.5.42 起本地页不再敷设遮罩，那一层连同 pendingShowRunnable 一并删除，
+     * 只保留「收起防抖」这一半。
      */
     private static final long OVERLAY_MIN_SHOW_MS = 420L;
     /**
@@ -508,6 +518,21 @@ public class BaseWebViewActivity extends BaseActivity {
     private static boolean isVideoPage(String url) {
         if (url == null) { return false; }
         return url.contains("tv.cctv.com") || url.contains("yangshipin.cn");
+    }
+
+    /**
+     * 本地资产页（工程内联的 tv-web 页面）：首页 index.html、央视片库 cctv.html、
+     * 央视栏目 column.html、支持我 dsm.html，以及本地播放页 live.html。
+     *
+     * 这些页面一律不经站点渲染，自身底色即 #0a1f3a 深蓝（见 css/my.css 与 css/rset.css
+     * 的 html,body），**没有站点骨架可挡**，遮罩对它们毫无作用。
+     *
+     * 注：v4.5.42 起计时逻辑已改成白名单式（只有 isVideoPage 才考虑遮罩），
+     * 本方法随之不再参与遮罩判定，保留仅作页面归属的自说明。
+     */
+    private static boolean isLocalAssetPage(String url) {
+        if (url == null) { return false; }
+        return url.contains("tv-web") || url.contains("live.html");
     }
 
     private Runnable pendingHideRunnable = null;
@@ -658,7 +683,8 @@ public class BaseWebViewActivity extends BaseActivity {
      */
     private void hideLoadingOverlay() {
         try {
-            /* 收罩是终态：遮罩没有「延迟待显示」这一层，不存在被排队定时器重新弹出的情况。 */
+            /* 收罩必须是终态。v4.5.42 起已无「延迟待显示」这一层（见 onPageLoadStarted
+               改为白名单式），不会再出现罩被排队的定时器重新弹出、且无人收的情况。 */
             cancelPendingHide();
             if (overlayShownAt <= 0) {
                 hideLoadingOverlayInternal(true);
@@ -752,8 +778,11 @@ public class BaseWebViewActivity extends BaseActivity {
      * 计时器的唯一用途，是给「网页脱壳」等待期间遮一遮，别让裸骨架露出来。
      *
      * 因此这里是**白名单式**的：只有 isVideoPage(url)（tv.cctv.com / yangshipin.cn）
-     * 才安排遮罩，其余页面一律不安排、什么也不做——本地页自身底色即 #0a1f3a，
-     * 没有站点骨架可挡，给它盖遮罩只会平白闪一下。
+     * 才安排遮罩，其余页面一律不安排、什么也不做。
+     *
+     * 此前写反了——「任何一次页面跳转都先安排遮罩」，于是首页、央视片库、央视栏目、
+     * 支持我、本地播放页 live.html 每次换页都弹一次「正在加载… 0.4~0.6s」，
+     * 与脱壳毫无关系。v4.5.42 从根因改回白名单，本地页不再有任何计时逻辑。
      */
     @Override
     protected void onPageLoadStarted(String url) {
